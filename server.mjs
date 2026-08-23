@@ -11,7 +11,7 @@ const dbPath = path.join(__dirname, "data", "plantation-financial-model.db.json"
 const cpoCachePath = path.join(__dirname, "public-cpo-data.json");
 const publicRoot = __dirname;
 const port = Number(process.env.PORT || 4173);
-const pythonPath = "/Users/admin/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3";
+const pythonPath = process.env.PYTHON || "python3";
 
 const mime = {
   ".html": "text/html; charset=utf-8",
