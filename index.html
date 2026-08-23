@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plantation Financial Model</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="./public/agrinexus-favicon-32.png?v=2" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./public/apple-touch-icon.png?v=2" />
+    <link rel="stylesheet" href="./styles.css?v=19" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <img src="./public/agrinexus-logo.jpeg" alt="Agrinexus Intel logo" />
+          <div>
+            <span>Unified Advisory Product</span>
+            <h1>Plantation Financial Model</h1>
+          </div>
+        </div>
+        <div class="tenant-controls" aria-label="User session controls">
+          <label>
+            Language
+            <select>
+              <option>English</option>
+              <option>Malay</option>
+            </select>
+          </label>
+          <label>
+            User
+            <input value="admin" />
+          </label>
+          <label>
+            Tenant
+            <select>
+              <option>Agrilntel portfolio</option>
+              <option>OPSL finance</option>
+            </select>
+          </label>
+        </div>
+      </header>
+
+      <nav class="market-strip" aria-label="Market desk">
+        <b><span class="mini-icon">mk</span> Market Desk</b>
+        <div class="ticker-window" aria-live="polite">
+          <div class="ticker-track" id="marketTicker">
+            <span>Loading public market data...</span>
+          </div>
+        </div>
+      </nav>
+
+      <main class="workspace">
+        <aside class="sidebar">
+          <button class="module active" data-view="overview"><span class="mini-icon">$</span> Overview</button>
+          <button class="module" data-view="management"><span class="mini-icon">mc</span> Management Console</button>
+          <button class="module" data-view="inputs"><span class="mini-icon">in</span> Input Capture</button>
+          <button class="module" data-view="dashboards"><span class="mini-icon">rp</span> Reports</button>
+          <div class="sidebar-card">
+            <span>Workbook Source</span>
+            <strong>OPSL Aug26 FINAL</strong>
+            <small>One-time source used to seed the database model.</small>
+          </div>
+        </aside>
+
+        <section class="content">
+          <section class="view active" id="overview">
+            <div class="page-head">
+              <div>
+                <span class="eyebrow">Financial Model Module</span>
+                <h2>Plantation Financial Model</h2>
+                <p>Manage assumptions, budget requirements, costing, formula calculations, dashboards, and financial analysis for plantation planning.</p>
+              </div>
+              <div class="action-row">
+                <button class="icon-button" title="Refresh workbook map"><span>rf</span></button>
+                <button class="primary-button" title="Download entered inputs as Excel sheets">
+                  <span class="mini-icon">dl</span> Download Excel
+                </button>
+              </div>
+            </div>
+
+            <div class="metrics-grid" id="metrics"></div>
+            <section class="mobile-report-strip" aria-label="Mobile IFRS report snapshots" id="ifrsMobileCards"></section>
+
+            <div class="overview-grid">
+              <article class="panel cpo-overview-panel">
+                <div id="publicCpoOverviewPanel" class="cpo-overview-slot">
+                  <header>
+                    <div>
+                      <span class="eyebrow">Market Desk</span>
+                      <h3>CPO report</h3>
+                    </div>
+                    <span class="status-pill">Local cache</span>
+                  </header>
+                  <div class="empty-state">
+                    <strong>Loading local CPO market data</strong>
+                    <span>Reading cached market snapshot for the overview panel.</span>
+                  </div>
+                </div>
+              </article>
+
+              <article class="panel">
+                <header>
+                  <div>
+                    <span class="eyebrow">Model Flow</span>
+                    <h3>High-impact dependencies</h3>
+                  </div>
+                  <span class="status-pill amber">Formula-driven</span>
+                </header>
+                <div class="dependency-list" id="topDependencies"></div>
+              </article>
+            </div>
+
+            <article class="panel">
+              <header>
+                <div>
+                  <span class="eyebrow">Application Architecture</span>
+                  <h3>Proposed system modules</h3>
+                </div>
+              </header>
+              <div class="architecture-grid">
+                <div><b>Initial Workbook Migration</b><span>Use the Excel workbook once to map structure, seed records, and archive source evidence.</span></div>
+                <div><b>Input Workbench</b><span>Budget, material, personnel, exchange-rate, bank balance, and scenario entry screens.</span></div>
+                <div><b>Database Calculation Engine</b><span>Editable formula rules, dependency graph, run status, checks, and audit logs.</span></div>
+                <div><b>Approval Workflow</b><span>Estate submission, finance review, approver sign-off, exception comments, and locked periods.</span></div>
+                <div><b>Reports & Dashboards</b><span>All non-input display sheets become reviewable reports with dashboards for funding, costing, variance, and financial analysis.</span></div>
+                <div><b>Access Control</b><span>Tenant, estate, cost-center, role, and sheet-level permissions matching Advisory shell.</span></div>
+              </div>
+            </article>
+          </section>
+
+          <section class="view" id="management">
+            <div class="mc-shell local-mc-shell">
+              <header class="mc-header">
+                <div>
+                  <span class="eyebrow">Management Console</span>
+                  <h2>Company, project, users, and controls</h2>
+                  <p>Maintain master settings, user workflow, model validation, and audit controls from one administration area.</p>
+                </div>
+                <div class="mc-tabs" id="managementTabs" aria-label="Management console tabs">
+                  <button class="active" data-management-tab="settings">Master Settings</button>
+                  <button data-management-tab="governance">Governance</button>
+                  <button data-management-tab="users">Users</button>
+                  <button data-management-tab="calculations">Calculations</button>
+                  <button data-management-tab="validation">Validation</button>
+                </div>
+              </header>
+
+              <div class="mc-stats" id="managementStats"></div>
+
+              <div class="mc-workspace">
+                <nav class="mc-sidebar" id="managementSidebar" aria-label="Management console sections">
+                  <button class="active" data-management-tab="settings">
+                    <b>Company Setup</b>
+                    <span>Company, project, currency, and start year</span>
+                  </button>
+                  <button data-management-tab="governance">
+                    <b>Roles & Permissions</b>
+                    <span>Workflow authority and screen access</span>
+                  </button>
+                  <button data-management-tab="users">
+                    <b>User Directory</b>
+                    <span>Assigned users and account status</span>
+                  </button>
+                  <button data-management-tab="calculations">
+                    <b>Calculation Engine</b>
+                    <span>Formula publish, dependency graph, and recalculation</span>
+                  </button>
+                  <button data-management-tab="validation">
+                    <b>Model Controls</b>
+                    <span>Automated checks, audit trail, and publishing state</span>
+                  </button>
+                </nav>
+
+                <div class="mc-content">
+                  <section class="mc-section active" data-management-panel="settings">
+                    <article class="mc-panel">
+                      <header>
+                        <div>
+                          <span class="eyebrow">Master Settings</span>
+                          <h3>Company and project profile</h3>
+                        </div>
+                        <span class="status-pill">Database linked</span>
+                      </header>
+                      <div class="management-setting-list">
+                        <label class="field management-setting-row">
+                          <span>Company name</span>
+                          <input id="managementCompanyName" />
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Project name</span>
+                          <input id="managementProjectName" />
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Reporting currency</span>
+                          <select id="managementReportingCurrency"></select>
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Start year</span>
+                          <input id="managementStartYear" type="number" min="1900" max="2200" step="1" />
+                        </label>
+                      </div>
+                      <footer class="management-footer">
+                        <span id="managementConsoleStatus">Report headers and period years use these saved settings.</span>
+                        <button class="primary-button" id="saveManagementConsole"><span class="mini-icon">sv</span> Save</button>
+                      </footer>
+                    </article>
+                    <article class="mc-panel">
+                      <header><h3>Publishing Controls</h3></header>
+                      <div class="check-list">
+                        <div><b>Draft model</b><span>Seeded workbook data is editable while finance reviews formula rules.</span></div>
+                        <div><b>Controlled reports</b><span>Financial statements and PDF exports use the saved company, project, currency, and start-year settings.</span></div>
+                        <div><b>Change trace</b><span>Input edits are saved into the local database and update linked reports.</span></div>
+                      </div>
+                    </article>
+                  </section>
+
+                  <section class="mc-section" data-management-panel="governance">
+                    <div class="mc-panel-head">
+                      <div>
+                        <span class="eyebrow">Governance</span>
+                        <h3>User access control and workflow</h3>
+                      </div>
+                      <button class="primary-button" id="addManagementRole"><span class="mini-icon">+</span> Add Role</button>
+                    </div>
+                    <div class="access-grid management-access-grid">
+                      <article class="mc-panel">
+                        <header><h3>Roles</h3></header>
+                        <div class="role-list" id="managementRoleList"></div>
+                      </article>
+                      <article class="mc-panel wide">
+                        <header><h3>Permission Matrix</h3></header>
+                        <table class="permission-table">
+                          <thead><tr><th>Area</th><th>Admin</th><th>Finance</th><th>Estate</th><th>Reviewer</th></tr></thead>
+                          <tbody id="managementPermissionMatrix"></tbody>
+                        </table>
+                      </article>
+                    </div>
+                  </section>
+
+                  <section class="mc-section" data-management-panel="users">
+                    <article class="mc-panel user-directory-panel">
+                      <header>
+                        <div>
+                          <span class="eyebrow">User Directory</span>
+                          <h3>Admin and assigned users</h3>
+                        </div>
+                        <button class="primary-button" id="addManagementUser"><span class="mini-icon">+</span> Add User</button>
+                      </header>
+                      <div class="directory-scroll">
+                        <table class="permission-table user-directory">
+                          <thead>
+                            <tr>
+                              <th>User Name</th>
+                              <th>Email</th>
+                              <th>Role</th>
+                              <th>Company Access</th>
+                              <th>Status</th>
+                              <th>Last Access</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody id="managementUserDirectory"></tbody>
+                        </table>
+                      </div>
+                    </article>
+                  </section>
+
+                  <section class="mc-section" data-management-panel="calculations">
+                    <article class="mc-panel calculation-console">
+                      <header>
+                        <div>
+                          <span class="eyebrow">Calculation Engine</span>
+                          <h3>Formula publish and recalculation</h3>
+                        </div>
+                        <button class="primary-button" id="runCalculationEngine"><span class="mini-icon">fx</span> Run Recalculation</button>
+                      </header>
+                      <div class="calculation-console-body">
+                        <div class="calc-status-grid" id="managementCalculationStats"></div>
+                        <div class="calculation-workbench">
+                          <section class="calc-card">
+                            <header>
+                              <div>
+                                <span class="eyebrow">Calculation Inputs</span>
+                                <h4>Database-linked assumptions</h4>
+                              </div>
+                              <button class="secondary-button" id="openCalculationInputScreen">Open Input Screen</button>
+                            </header>
+                            <div class="calc-control-row">
+                              <select id="managementInputSheetSelect" aria-label="Select input screen"></select>
+                            </div>
+                            <div class="management-input-controls" id="managementInputControls"></div>
+                          </section>
+                          <section class="calc-card">
+                            <header>
+                              <div>
+                                <span class="eyebrow">Formula Studio</span>
+                                <h4>Edit, publish, and recalculate</h4>
+                              </div>
+                              <span class="status-pill" id="managementFormulaStatus">Ready</span>
+                            </header>
+                            <div class="calc-formula-grid">
+                              <select id="managementFormulaSheetSelect" aria-label="Select formula sheet"></select>
+                              <select id="managementFormulaRuleSelect" aria-label="Select formula rule"></select>
+                              <textarea id="managementFormulaEditor" spellcheck="false"></textarea>
+                            </div>
+                            <footer class="calc-card-actions">
+                              <button class="secondary-button" id="managementSaveFormulaDraft"><span class="mini-icon">sv</span> Save Draft</button>
+                              <button class="primary-button" id="managementPublishFormula"><span class="mini-icon">fx</span> Publish & Recalc</button>
+                            </footer>
+                          </section>
+                        </div>
+                        <div class="pipeline compact-pipeline" id="managementPipeline"></div>
+                        <div class="relationship-table compact-relationships" id="managementRelationshipTable"></div>
+                      </div>
+                    </article>
+                  </section>
+
+                  <section class="mc-section" data-management-panel="validation">
+                    <div class="checks-grid management-validation-grid">
+                      <article class="mc-panel">
+                        <header><h3>Automated Checks</h3></header>
+                        <div class="check-list" id="managementCheckList"></div>
+                      </article>
+                      <article class="mc-panel">
+                        <header><h3>Audit Trail</h3></header>
+                        <div class="timeline">
+                          <div><b>Source workbook migrated</b><span>One-time Excel structure captured and archived.</span></div>
+                          <div><b>Inputs classified</b><span>Yellow tabs and yellow cells converted into database-backed fields.</span></div>
+                          <div><b>Formula scan completed</b><span>References, formulas and exception markers stored as calculation rules.</span></div>
+                          <div><b>Awaiting review</b><span>Finance owner to resolve formula flags before publishing the model.</span></div>
+                        </div>
+                      </article>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="inputs">
+            <div class="page-head compact">
+              <div>
+                <span class="eyebrow">Yellow Inputs</span>
+                <h2>Right-to-left data capture screens</h2>
+              </div>
+              <input class="search" id="sheetSearch" placeholder="Search sheets or labels" />
+            </div>
+            <div class="input-layout">
+              <div class="sheet-list" id="sheetList"></div>
+              <article class="panel input-detail">
+                <header>
+                  <div>
+                    <span class="eyebrow" id="selectedSheetMeta">Input Sheet</span>
+                    <h3 id="selectedSheetTitle">Gen Inputs</h3>
+                  </div>
+                  <div class="input-actions" aria-label="Input screen actions">
+                    <button class="action-icon add" id="addInputRowTop" title="Add" aria-label="Add">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                    </button>
+                    <button class="action-icon edit" id="focusInputGrid" title="Edit" aria-label="Edit">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z" /><path d="m14 7 3 3" /></svg>
+                    </button>
+                    <button class="action-icon delete" id="deleteLastInputRow" title="Delete" aria-label="Delete">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14" /><path d="M9 7V5h6v2" /><path d="M8 7l1 13h6l1-13" /><path d="M10 11v5M14 11v5" /></svg>
+                    </button>
+                  </div>
+                </header>
+                <div class="input-fields" id="inputFields"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" id="dashboards">
+            <div class="report-workspace">
+              <article class="panel report-library">
+                <header>
+                  <div>
+                    <span class="eyebrow">Report Library</span>
+                    <h3>Workbook output sheets</h3>
+                  </div>
+                  <span class="status-pill" id="reportCount">Reports</span>
+                </header>
+                <div class="report-list" id="reportList"></div>
+              </article>
+              <article class="panel report-preview">
+                <header>
+                  <div>
+                    <span class="eyebrow" id="reportCategory">Report</span>
+                    <h3 id="reportTitle">Summary (US$)</h3>
+                  </div>
+                  <div class="input-actions">
+                    <button class="action-icon edit" id="viewReport" title="View report" aria-label="View report">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><path d="M12 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z" /></svg>
+                    </button>
+                    <button class="action-icon add" id="downloadReport" title="Download report" aria-label="Download report">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+                    </button>
+                  </div>
+                </header>
+                <div class="report-detail" id="reportDetail"></div>
+              </article>
+            </div>
+            <div class="dashboard-grid report-dashboard">
+              <article class="panel wide">
+                <header>
+                  <div>
+                    <span class="eyebrow">Financial Summary</span>
+                    <h3>Executive dashboard</h3>
+                  </div>
+                  <span class="status-pill">Report-linked</span>
+                </header>
+                <div class="report-kpis dashboard-kpis" id="reportSummaryKpis"></div>
+              </article>
+              <article class="panel">
+                <header>
+                  <div>
+                    <span class="eyebrow">Budget Requirement</span>
+                    <h3>Funding bridge</h3>
+                  </div>
+                  <span class="status-pill red" id="fundingDashboardStatus">Shortfall flagged</span>
+                </header>
+                <div class="bar-chart" id="fundingChart"></div>
+              </article>
+              <article class="panel">
+                <header>
+                  <div>
+                    <span class="eyebrow">Ratios</span>
+                    <h3>Financial ratios</h3>
+                  </div>
+                </header>
+                <div class="statement-list compact-statements" id="reportRatioDashboard"></div>
+              </article>
+              <article class="panel wide">
+                <header>
+                  <div>
+                    <span class="eyebrow">IFRS Reporting</span>
+                    <h3>Cash flow and balance sheet snapshot</h3>
+                  </div>
+                </header>
+                <div class="statement-list two-col-statements" id="reportIfrsDashboard"></div>
+              </article>
+              <article class="panel wide ifrs-statement-pack">
+                <header>
+                  <div>
+                    <span class="eyebrow">IFRS Reporting</span>
+                    <h3>Detailed financial statements</h3>
+                  </div>
+                  <span class="status-pill">27-year model</span>
+                </header>
+                <div class="ifrs-note">IFRS-style management reporting. Entity-specific accounting policies, tax treatment, and statutory disclosures require accountant review before external publication.</div>
+                <div class="ifrs-chart-grid" id="ifrsStatementCharts"></div>
+                <div class="ifrs-statement-list" id="ifrsStatementPack"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" id="checks">
+            <div class="page-head compact">
+              <div>
+                <span class="eyebrow">Controls</span>
+                <h2>Model validation and audit trail</h2>
+              </div>
+              <span class="status-pill red" id="checkStatus">Needs review</span>
+            </div>
+            <div class="checks-grid">
+              <article class="panel">
+                <header><h3>Automated Checks</h3></header>
+                <div class="check-list" id="checkList"></div>
+              </article>
+              <article class="panel">
+                <header><h3>Audit Trail</h3></header>
+                <div class="timeline">
+                  <div><b>Source workbook migrated</b><span>One-time Excel structure captured and archived.</span></div>
+                  <div><b>Inputs classified</b><span>Yellow tabs and yellow cells converted into database-backed fields.</span></div>
+                  <div><b>Formula scan completed</b><span>References, formulas and exception markers stored as calculation rules.</span></div>
+                  <div><b>Awaiting review</b><span>Finance owner to resolve formula flags before publishing the model.</span></div>
+                </div>
+              </article>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+    <script src="./app.js?v=19"></script>
+  </body>
+</html>

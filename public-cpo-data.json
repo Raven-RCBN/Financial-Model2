@@ -1,0 +1,152 @@
+{
+  "refreshedAt": "19 Aug 2026, MPOC close",
+  "source": "MPOC Daily Palm Oil Prices",
+  "previousClose": "18 Aug 2026",
+  "cards": [
+    {
+      "label": "Front-month FCPO",
+      "primary": "RM 4,893",
+      "primaryDelta": "RM 33 (+0.68%) day",
+      "secondary": "USD 1,207",
+      "secondaryDelta": "$8 (+0.67%) day",
+      "footnote": "Latest MPOC / Bursa settlement 19 Aug 2026",
+      "primaryTone": "up",
+      "secondaryTone": "up"
+    },
+    {
+      "label": "Spot / cash CPO",
+      "primary": "RM 4,530",
+      "primaryDelta": "RM 10 (+0.22%) day",
+      "secondary": "USD 1,109",
+      "secondaryDelta": "$3 (+0.27%) day",
+      "footnote": "Aug-26 nearby"
+    },
+    {
+      "label": "USD / MYR",
+      "primary": "4.0545",
+      "primaryDelta": "BNM latest 2026-08-18",
+      "secondary": "",
+      "secondaryDelta": "",
+      "footnote": "USD/MYR public feed for conversion",
+      "primaryTone": "neutral"
+    },
+    {
+      "label": "Volume (Oct-26)",
+      "primary": "26,853",
+      "primaryDelta": "lots traded",
+      "secondary": "",
+      "secondaryDelta": "",
+      "footnote": "Open interest: 95,273",
+      "negative": "(-12,268)"
+    }
+  ],
+  "curve": {
+    "title": "CPO settlement trend - latest public source",
+    "subtitle": "Latest 19 Aug 2026 RM4,893 | recent high RM4,893 | recent change +RM207",
+    "labels": [
+      "6 Aug-26",
+      "7 Aug-26",
+      "10 Aug-26",
+      "11 Aug-26",
+      "12 Aug-26",
+      "13 Aug-26",
+      "14 Aug-26",
+      "17 Aug-26",
+      "18 Aug-26",
+      "19 Aug-26"
+    ],
+    "prices": [
+      4686,
+      4677,
+      4723,
+      4748,
+      4697,
+      4724,
+      4710,
+      4821,
+      4860,
+      4893
+    ],
+    "volume": [
+      2500,
+      7000,
+      27000,
+      23000,
+      12000,
+      11000,
+      6000,
+      7000,
+      5000,
+      6000
+    ]
+  },
+  "today": [
+    [
+      "Today (latest settlement 19 Aug 2026)",
+      "RM 4,893",
+      "neutral"
+    ],
+    [
+      "1-day change",
+      "▲ RM 33 (+0.68%)",
+      "up"
+    ],
+    [
+      "Recent source change",
+      "▲ RM 207 (+4.42%)",
+      "up"
+    ],
+    [
+      "Recent high / low",
+      "4,893 / 4,677",
+      "neutral"
+    ],
+    [
+      "Public source",
+      "MPOC / Bursa Malaysia",
+      "neutral"
+    ],
+    [
+      "Position in recent range",
+      "100th percentile",
+      "neutral"
+    ]
+  ],
+  "adjacent": [
+    [
+      "DCE soyoil (overnight)",
+      "+0.5%",
+      "up"
+    ],
+    [
+      "CBOT soyoil",
+      "+0.1%",
+      "up"
+    ],
+    [
+      "Brent crude",
+      "$88.42 (+1.6% d/d)",
+      "up"
+    ],
+    [
+      "CPO-SBO spread*",
+      "-$397 (CPO discount)",
+      "down"
+    ],
+    [
+      "MPOB stocks (Jul)",
+      "2.63 mn t (+3.32% m/m)",
+      "up"
+    ],
+    [
+      "Export (MPOB, Jul)",
+      "+14.5% m/m to 1.39 mn t",
+      "up"
+    ]
+  ],
+  "sourceUrl": "https://www.mpoc.org.my/market-insight/daily-palm-oil-prices/",
+  "refreshStatus": "live",
+  "sourceUpdatedAt": "20 Aug 2026, 11:16:34",
+  "cacheUpdatedAt": "20 Aug 2026, 11:16:34",
+  "fxSourceDate": "2026-08-18"
+}
