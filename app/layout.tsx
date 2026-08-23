@@ -13,11 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Starter Project",
-  description: "A clean starting point for building your site.",
+  title: "Financial Model 2",
+  description: "Seeded OPSL plantation financial model test app.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/fm/public/agrinexus-favicon-32.png",
+    shortcut: "/fm/public/agrinexus-favicon-32.png",
+    apple: "/fm/public/apple-touch-icon.png",
   },
 };
 

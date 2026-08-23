@@ -1,15 +1,10 @@
-import type { Metadata } from "next";
-import { SkeletonPreview } from "./_sites-preview/SkeletonPreview";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Your site is taking shape",
-  description:
-    "Your first version will appear here automatically when it’s ready.",
-  other: {
-    "codex-preview": "development",
-  },
+export const metadata = {
+  title: "Financial Model 2",
+  description: "Seeded OPSL plantation financial model test app.",
 };
 
 export default function Home() {
-  return <SkeletonPreview />;
+  redirect("/fm/index.html");
 }
