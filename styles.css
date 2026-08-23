@@ -113,6 +113,25 @@ p {
   font-weight: 700;
 }
 
+.logout-link {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #cddae7;
+  border-radius: 6px;
+  color: var(--blue);
+  background: #f7fbff;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.logout-link:hover {
+  border-color: var(--blue);
+  background: #eef7ff;
+}
+
 .market-strip {
   margin: 20px auto 14px;
   width: calc(100% - 58px);

@@ -145,9 +145,10 @@ function cookieOptions(req, maxAgeSeconds = Math.floor(sessionTtlMs / 1000)) {
 }
 
 function safeReturnTo(value) {
-  const text = String(value || "/");
-  if (!text.startsWith("/") || text.startsWith("//")) return "/";
-  if (text.startsWith("/login") || text.startsWith("/logout")) return "/";
+  const text = String(value || "/app");
+  if (text === "/") return "/app";
+  if (!text.startsWith("/") || text.startsWith("//")) return "/app";
+  if (text.startsWith("/login") || text.startsWith("/logout")) return "/app";
   return text;
 }
 
@@ -256,7 +257,7 @@ async function handleLogin(req, res, url) {
 
 function handleLogout(req, res) {
   res.writeHead(303, {
-    Location: "/login",
+    Location: "/",
     "Set-Cookie": `${authCookieName}=; ${cookieOptions(req, 0)}`,
     "Cache-Control": "no-store",
   });
@@ -1618,7 +1619,7 @@ async function api(req, res, url) {
 }
 
 async function staticFile(req, res, url) {
-  let filePath = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
+  let filePath = ["/", "/app"].includes(url.pathname) ? "/index.html" : decodeURIComponent(url.pathname);
   filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, "");
   const absolute = path.join(publicRoot, filePath);
   if (!absolute.startsWith(publicRoot)) return notFound(req, res);
@@ -1641,6 +1642,11 @@ async function staticFile(req, res, url) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
+    if (url.pathname === "/" && req.method === "GET") return sendLoginPage(req, res, 200, "", "/app");
+    if (url.pathname === "/app/") {
+      res.writeHead(301, { Location: "/app", "Cache-Control": "no-store" });
+      return res.end();
+    }
     if (url.pathname === "/login") return await handleLogin(req, res, url);
     if (url.pathname === "/logout") return handleLogout(req, res);
     if (!hasValidSession(req)) {
