@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, "data", "plantation-financial-model.db.json");
+const dbPath = process.env.FM2_DB_PATH || path.join(__dirname, "data", "plantation-financial-model.db.json");
 const cpoCachePath = path.join(__dirname, "public-cpo-data.json");
 const publicRoot = __dirname;
 const port = Number(process.env.PORT || 4173);
