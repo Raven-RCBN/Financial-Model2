@@ -12,6 +12,11 @@ const cpoCachePath = path.join(__dirname, "public-cpo-data.json");
 const publicRoot = __dirname;
 const port = Number(process.env.PORT || 4173);
 const pythonPath = process.env.PYTHON || "python3";
+const authUser = process.env.FM2_AUTH_USER || "finance";
+const authPassword = process.env.FM2_AUTH_PASSWORD || "Finance@123";
+const authSecret = process.env.FM2_AUTH_SECRET || "fm2-change-this-secret";
+const authCookieName = "fm2_session";
+const sessionTtlMs = 12 * 60 * 60 * 1000;
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -74,6 +79,188 @@ function notFound(req, res) {
 
 function badRequest(req, res, message) {
   send(req, res, 400, { message });
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function timingSafeTextEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function parseCookies(header = "") {
+  return Object.fromEntries(
+    String(header)
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const index = part.indexOf("=");
+        if (index < 0) return [part, ""];
+        return [decodeURIComponent(part.slice(0, index)), decodeURIComponent(part.slice(index + 1))];
+      }),
+  );
+}
+
+function sessionSignature(payload) {
+  return crypto.createHmac("sha256", authSecret).update(payload).digest("base64url");
+}
+
+function createSessionToken(userId) {
+  const payload = Buffer.from(JSON.stringify({ userId, expiresAt: Date.now() + sessionTtlMs })).toString("base64url");
+  return `${payload}.${sessionSignature(payload)}`;
+}
+
+function hasValidSession(req) {
+  const token = parseCookies(req.headers.cookie)[authCookieName];
+  if (!token) return false;
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature || !timingSafeTextEqual(signature, sessionSignature(payload))) return false;
+  try {
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return session.userId === authUser && Number(session.expiresAt) > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function cookieOptions(req, maxAgeSeconds = Math.floor(sessionTtlMs / 1000)) {
+  const secure = req.headers["x-forwarded-proto"] === "https" || String(req.headers.host || "").includes("fm2.digitalpalm.ai");
+  return [
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${maxAgeSeconds}`,
+    secure ? "Secure" : "",
+  ].filter(Boolean).join("; ");
+}
+
+function safeReturnTo(value) {
+  const text = String(value || "/");
+  if (!text.startsWith("/") || text.startsWith("//")) return "/";
+  if (text.startsWith("/login") || text.startsWith("/logout")) return "/";
+  return text;
+}
+
+async function requestBodyText(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+function loginHtml(errorMessage = "", returnTo = "/") {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Financial Model 2 Login</title>
+    <style>
+      :root { color-scheme: light; font-family: Inter, Arial, sans-serif; }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        background: #f4f7fb;
+        color: #172033;
+      }
+      main {
+        width: min(420px, calc(100vw - 32px));
+        background: #ffffff;
+        border: 1px solid #d9e1ec;
+        border-radius: 8px;
+        box-shadow: 0 18px 50px rgba(23, 32, 51, 0.12);
+        padding: 32px;
+      }
+      h1 { margin: 0 0 8px; font-size: 24px; }
+      p { margin: 0 0 24px; color: #667085; line-height: 1.5; }
+      label { display: grid; gap: 8px; margin-bottom: 16px; font-weight: 700; font-size: 13px; }
+      input {
+        box-sizing: border-box;
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 12px 14px;
+        font: inherit;
+      }
+      input:focus { outline: 3px solid rgba(24, 119, 242, 0.18); border-color: #1877f2; }
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 6px;
+        padding: 13px 16px;
+        background: #123a6f;
+        color: #fff;
+        font: inherit;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .error {
+        margin: 0 0 16px;
+        padding: 10px 12px;
+        border-radius: 6px;
+        background: #fef3f2;
+        color: #b42318;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Financial Model 2</h1>
+      <p>Sign in to access the seeded plantation financial model.</p>
+      ${errorMessage ? `<div class="error">${escapeHtml(errorMessage)}</div>` : ""}
+      <form method="post" action="/login?returnTo=${encodeURIComponent(safeReturnTo(returnTo))}">
+        <label>User ID<input name="userid" autocomplete="username" required autofocus /></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+        <button type="submit">Sign in</button>
+      </form>
+    </main>
+  </body>
+</html>`;
+}
+
+function sendLoginPage(req, res, status = 200, errorMessage = "", returnTo = "/") {
+  send(req, res, status, loginHtml(errorMessage, returnTo), "text/html; charset=utf-8", { cacheControl: "no-store" });
+}
+
+async function handleLogin(req, res, url) {
+  const returnTo = safeReturnTo(url.searchParams.get("returnTo"));
+  if (req.method === "GET") return sendLoginPage(req, res, 200, "", returnTo);
+  if (req.method !== "POST") return notFound(req, res);
+
+  const body = new URLSearchParams(await requestBodyText(req));
+  const userId = body.get("userid") || body.get("userId") || body.get("username") || "";
+  const password = body.get("password") || "";
+  if (!timingSafeTextEqual(userId, authUser) || !timingSafeTextEqual(password, authPassword)) {
+    return sendLoginPage(req, res, 401, "Invalid user ID or password.", returnTo);
+  }
+
+  res.writeHead(303, {
+    Location: returnTo,
+    "Set-Cookie": `${authCookieName}=${encodeURIComponent(createSessionToken(authUser))}; ${cookieOptions(req)}`,
+    "Cache-Control": "no-store",
+  });
+  res.end();
+}
+
+function handleLogout(req, res) {
+  res.writeHead(303, {
+    Location: "/login",
+    "Set-Cookie": `${authCookieName}=; ${cookieOptions(req, 0)}`,
+    "Cache-Control": "no-store",
+  });
+  res.end();
 }
 
 function calculateOutputs(model) {
@@ -1454,6 +1641,14 @@ async function staticFile(req, res, url) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
+    if (url.pathname === "/login") return await handleLogin(req, res, url);
+    if (url.pathname === "/logout") return handleLogout(req, res);
+    if (!hasValidSession(req)) {
+      if (url.pathname.startsWith("/api/")) {
+        return send(req, res, 401, { message: "Authentication required" }, "application/json; charset=utf-8", { cacheControl: "no-store" });
+      }
+      return sendLoginPage(req, res, 200, "", `${url.pathname}${url.search}`);
+    }
     if (url.pathname.startsWith("/api/")) return await api(req, res, url);
     return await staticFile(req, res, url);
   } catch (error) {

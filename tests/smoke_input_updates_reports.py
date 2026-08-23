@@ -1,11 +1,29 @@
 from __future__ import annotations
 
 import json
+import os
+import urllib.parse
 import urllib.request
+from http.cookiejar import CookieJar
 
 
-BASE_URL = "http://127.0.0.1:4173"
+BASE_URL = os.environ.get("FM2_BASE_URL", "http://127.0.0.1:4173").rstrip("/")
 PROJECT_ID = "project_opsl_15000ha_development"
+OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
+
+
+def login():
+    data = urllib.parse.urlencode({
+        "userid": os.environ.get("FM2_AUTH_USER", "finance"),
+        "password": os.environ.get("FM2_AUTH_PASSWORD", "Finance@123"),
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        f"{BASE_URL}/login",
+        data=data,
+        method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    OPENER.open(request, timeout=10).close()
 
 
 def request_json(path, method="GET", body=None):
@@ -14,7 +32,7 @@ def request_json(path, method="GET", body=None):
     if body is not None:
         data = json.dumps(body).encode("utf-8")
     request = urllib.request.Request(f"{BASE_URL}{path}", data=data, method=method, headers=headers)
-    with urllib.request.urlopen(request, timeout=10) as response:
+    with OPENER.open(request, timeout=10) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -59,6 +77,7 @@ def update_input(input_record, value):
 
 
 def main():
+    login()
     payload = request_json(f"/api/projects/{PROJECT_ID}")
     checks = [
         {

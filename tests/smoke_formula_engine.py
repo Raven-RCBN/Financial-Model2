@@ -1,12 +1,31 @@
 import json
+import os
+import urllib.parse
 import urllib.request
+from http.cookiejar import CookieJar
 
 
 PROJECT_ID = "project_opsl_15000ha_development"
-BASE_URL = f"http://127.0.0.1:4173/api/projects/{PROJECT_ID}"
+ROOT_URL = os.environ.get("FM2_BASE_URL", "http://127.0.0.1:4173").rstrip("/")
+BASE_URL = f"{ROOT_URL}/api/projects/{PROJECT_ID}"
 FORMULA_ID = "formula_opsl_aug_bud_req_c13"
 TARGET_SHEET = "OPSL AUG BUD req"
 TARGET_CELL = "C13"
+OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
+
+
+def login():
+    data = urllib.parse.urlencode({
+        "userid": os.environ.get("FM2_AUTH_USER", "finance"),
+        "password": os.environ.get("FM2_AUTH_PASSWORD", "Finance@123"),
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        f"{ROOT_URL}/login",
+        data=data,
+        method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    OPENER.open(request, timeout=10).close()
 
 
 def request_json(path="", method="GET", payload=None):
@@ -17,7 +36,7 @@ def request_json(path="", method="GET", payload=None):
         method=method,
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=10) as response:
+    with OPENER.open(request, timeout=10) as response:
         return json.load(response)
 
 
@@ -31,6 +50,7 @@ def formula(payload, formula_id):
 
 
 def main():
+    login()
     initial = request_json()
     original = formula(initial, FORMULA_ID)["formula"]
     try:
