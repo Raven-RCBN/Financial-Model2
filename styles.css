@@ -825,7 +825,7 @@ p {
   z-index: 2;
   background: #24476c;
   color: #fff;
-  font-weight: 650;
+  font-weight: 800;
 }
 
 .financial-grid thead tr:nth-child(2) th {
@@ -844,13 +844,13 @@ p {
 .financial-grid td.sticky-label {
   background: #fff;
   color: #17324a;
-  font-weight: 560;
+  font-weight: 700;
 }
 
 .financial-grid tr.section td {
   background: #dcecc6;
   color: #17324a;
-  font-weight: 680;
+  font-weight: 800;
   text-align: left;
 }
 
@@ -859,14 +859,17 @@ p {
 }
 
 .financial-grid tr.subheader td,
-.financial-grid tr.total td {
-  font-weight: 680;
+.financial-grid tr.total td,
+.financial-grid tr.workbook-header-row td,
+.financial-grid tr.workbook-total-row td,
+.financial-grid tr.workbook-subtotal-row td {
+  font-weight: 800;
 }
 
 .financial-grid tr.blue-total td {
   background: #002060;
   color: #fff;
-  font-weight: 680;
+  font-weight: 800;
 }
 
 .financial-grid tr.blue-total td.sticky-label {
@@ -917,8 +920,11 @@ p {
 }
 
 .financial-grid.worksheet-grid td.bold,
-.financial-grid.worksheet-grid tr.subheader td {
-  font-weight: 650;
+.financial-grid.worksheet-grid tr.subheader td,
+.financial-grid.worksheet-grid tr.workbook-header-row td,
+.financial-grid.worksheet-grid tr.workbook-total-row td,
+.financial-grid.worksheet-grid tr.workbook-subtotal-row td {
+  font-weight: 800;
 }
 
 .financial-grid.worksheet-grid td.center {
@@ -1529,17 +1535,24 @@ p {
 .statement-scroll tr.subheader td,
 .statement-scroll tr.section td,
 .statement-scroll tr.subheader .sticky-label,
-.statement-scroll tr.section .sticky-label {
+.statement-scroll tr.section .sticky-label,
+.statement-scroll tr.workbook-header-row td,
+.statement-scroll tr.workbook-header-row .sticky-label {
   background: #eaf6fd;
+  font-weight: 800;
 }
 
 .statement-scroll tr.total td,
 .statement-scroll tr.blue-total td,
+.statement-scroll tr.workbook-total-row td,
+.statement-scroll tr.workbook-subtotal-row td,
 .statement-scroll tr.total .sticky-label,
-.statement-scroll tr.blue-total .sticky-label {
+.statement-scroll tr.blue-total .sticky-label,
+.statement-scroll tr.workbook-total-row .sticky-label,
+.statement-scroll tr.workbook-subtotal-row .sticky-label {
   border-top: 2px solid #aebfba;
   color: var(--ink);
-  font-weight: 760;
+  font-weight: 800;
 }
 
 .statement-scroll td.negative {
@@ -3179,6 +3192,7 @@ p {
 #inputs .financial-grid.input-grid th {
   height: 30px;
   padding: 5px 8px;
+  font-weight: 800;
 }
 
 #inputs .financial-grid.input-grid td.actions-col .row-actions {
@@ -3202,9 +3216,18 @@ p {
   height: 30px;
   padding: 0 8px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#inputs .financial-grid.input-grid td.bold .input-cell-control,
+#inputs .financial-grid.input-grid tr.subheader .input-cell-control,
+#inputs .financial-grid.input-grid tr.total .input-cell-control,
+#inputs .financial-grid.input-grid tr.workbook-header-row .input-cell-control,
+#inputs .financial-grid.input-grid tr.workbook-total-row .input-cell-control,
+#inputs .financial-grid.input-grid tr.workbook-subtotal-row .input-cell-control {
+  font-weight: 800;
 }
 
 #inputs .financial-grid.input-grid tr.dark td,
@@ -3218,7 +3241,7 @@ p {
 #inputs .financial-grid.input-grid td.dark-input-cell .input-cell-control,
 #inputs .financial-grid.input-grid .input-cell-control.on-dark {
   color: #f8fbff;
-  font-weight: 620;
+  font-weight: 800;
 }
 
 #inputs .financial-grid.input-grid tr.dark .input-cell-control::selection,

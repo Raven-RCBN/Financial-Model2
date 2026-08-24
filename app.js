@@ -412,12 +412,12 @@ function formatMoney(value) {
   }).format(converted)}`;
 }
 
-function formatNumber(value) {
+function formatNumber(value, options = {}) {
   const number = Number(value);
   if (!Number.isFinite(number)) return String(value ?? "");
   return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: options.minimumFractionDigits ?? 0,
+    maximumFractionDigits: options.maximumFractionDigits ?? 4,
   }).format(number);
 }
 
@@ -445,6 +445,15 @@ function escapeHtml(value) {
 
 function rawInputCellValue(value) {
   if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+function displayWorkbookCellValue(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const text = String(value).trim();
+  if (text && Number.isFinite(Number(text.replaceAll(",", "")))) {
+    return formatNumber(Number(text.replaceAll(",", "")));
+  }
   return String(value);
 }
 
@@ -1094,6 +1103,16 @@ function inputCellIsDark(row, cell) {
   return style.includes("dark") || style.includes("blue-total");
 }
 
+function workbookRowClass(row) {
+  const labelText = (row?.label || row?.cells?.map((cell) => cell.value).join(" ") || "").toString().toLowerCase();
+  const style = String(row?.style || "").toLowerCase();
+  const classes = [];
+  if (style.includes("header") || style.includes("section")) classes.push("workbook-header-row");
+  if (style.includes("total") || /\btotal\b/.test(labelText)) classes.push("workbook-total-row");
+  if (style.includes("subtotal") || /\bsub[-\s]?total\b/.test(labelText)) classes.push("workbook-subtotal-row");
+  return classes.join(" ");
+}
+
 function renderInputWorkbookTable(table) {
   const rows = usefulInputRows(table);
   const pageSize = state.inputPageSize;
@@ -1129,7 +1148,7 @@ function renderInputWorkbookTable(table) {
           </thead>
           <tbody>
             ${pageRows.map((row) => `
-              <tr class="${row.style || "line"}">
+              <tr class="${row.style || "line"} ${workbookRowClass(row)}">
                 ${visibleColumns.map(({ index }, visibleIndex) => {
                   const cell = (row.cells || [])[index] || {
                     address: inputCellAddress(table, row, index),
@@ -1139,11 +1158,14 @@ function renderInputWorkbookTable(table) {
                   const style = cell.style || "";
                   const numeric = style.includes("number");
                   const darkCell = inputCellIsDark(row, cell);
-                  const value = rawInputCellValue(cell.value);
+                  const value = numeric ? displayWorkbookCellValue(cell.value) : rawInputCellValue(cell.value);
+                  const savedValue = numeric && cell.value !== "" && cell.value !== null && cell.value !== undefined
+                    ? String(Number(String(cell.value).replaceAll(",", "")))
+                    : rawInputCellValue(cell.value);
                   const address = cell.address || inputCellAddress(table, row, index);
                   return `
                     <td class="${visibleIndex === 0 ? "sticky-label" : ""} ${style} ${darkCell ? "dark-input-cell" : ""}">
-                      <input class="input-cell-control ${numeric ? "numeric" : ""} ${darkCell ? "on-dark" : ""}" data-sheet-name="${escapeHtml(table.sheetName)}" data-address="${escapeHtml(address)}" value="${escapeHtml(value)}" title="${escapeHtml(value)}" />
+                      <input class="input-cell-control ${numeric ? "numeric" : ""} ${darkCell ? "on-dark" : ""}" data-sheet-name="${escapeHtml(table.sheetName)}" data-address="${escapeHtml(address)}" data-last-saved-value="${escapeHtml(savedValue)}" value="${escapeHtml(value)}" title="${escapeHtml(value)}" />
                     </td>
                   `;
                 }).join("")}
@@ -1496,7 +1518,7 @@ function renderStatementTable({ title, note, table, rows, maxPeriods = 27 }) {
           </thead>
           <tbody>
             ${rows.map((row) => `
-              <tr class="${row.style || "line"}">
+              <tr class="${row.style || "line"} ${workbookRowClass(row)}">
                 <td class="sticky-label">${escapeHtml(row.label || "")}</td>
                 ${(row.values || []).slice(0, maxPeriods).map(reportTableCell).join("")}
               </tr>
@@ -1798,12 +1820,12 @@ function reportTableForSheet(sheetName) {
 
 function formatReportNumber(value) {
   if (value === null || value === undefined || value === "") return "-";
-  const number = Number(value);
+  const number = Number(String(value).replaceAll(",", ""));
   if (!Number.isFinite(number)) return String(value);
-  if (Math.abs(number) < 0.005) return "-";
+  if (Math.abs(number) < 0.00005) return "-";
   const text = new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
   }).format(Math.abs(number));
   return number < 0 ? `(${text})` : text;
 }
@@ -1921,8 +1943,8 @@ function renderWorkbookReportTable(table) {
           </thead>
           <tbody>
             ${(table.rows || []).map((row) => `
-              <tr class="${row.style || "line"}">
-                <td class="sticky-label">${row.label || ""}</td>
+              <tr class="${row.style || "line"} ${workbookRowClass(row)}">
+                <td class="sticky-label">${escapeHtml(row.label || "")}</td>
                 <td>${formatReportNumber(row.percent)}</td>
                 <td>${formatReportNumber(row.total)}</td>
                 ${(row.values || []).map((value) => {
@@ -1953,11 +1975,11 @@ function renderWorkbookGridTable(table) {
         <table class="financial-grid worksheet-grid ${table.presentation || ""} ${display.compacted ? "compact-report-grid" : ""}">
           <tbody>
             ${display.rows.map((row) => `
-              <tr class="${row.style || "line"}">
+              <tr class="${row.style || "line"} ${workbookRowClass(row)}">
                 ${(row.cells || []).map((cell, index) => {
                   const style = cell.style || "";
-                  const numeric = style.includes("number");
-                  const negative = style.includes("negative");
+                  const numeric = style.includes("number") || Number.isFinite(Number(String(cell.value ?? "").replaceAll(",", "")));
+                  const negative = style.includes("negative") || Number(String(cell.value ?? "").replaceAll(",", "")) < 0;
                   const value = numeric ? formatReportNumber(cell.value) : (cell.value ?? "");
                   return `<td class="${index === 0 ? "sticky-label" : ""} ${style} ${negative ? "negative" : ""}">${escapeHtml(value)}</td>`;
                 }).join("")}
