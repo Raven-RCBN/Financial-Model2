@@ -866,6 +866,14 @@ p {
   font-weight: 800;
 }
 
+.financial-grid tr.report-separator td {
+  height: 12px;
+  padding: 0;
+  border-left: 0;
+  border-right: 0;
+  background: #fff;
+}
+
 .financial-grid tr.blue-total td {
   background: #002060;
   color: #fff;

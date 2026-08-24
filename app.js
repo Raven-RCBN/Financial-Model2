@@ -1830,6 +1830,26 @@ function formatReportNumber(value) {
   return number < 0 ? `(${text})` : text;
 }
 
+function isBalanceSheetUsdHeaderRow(table, row) {
+  return table?.sheetName === "Balance Sheet" && String(row?.label || "").trim().toLowerCase() === "(all in usd nearest thousand)";
+}
+
+function reportDisplayValue(table, row, value) {
+  if (isBalanceSheetUsdHeaderRow(table, row)) {
+    const match = String(value ?? "").match(/^(\d{4})-\d{2}-\d{2}(?:t.*)?$/i);
+    if (match) return match[1];
+  }
+  return value;
+}
+
+function reportDisplayText(table, row, value) {
+  const displayValue = reportDisplayValue(table, row, value);
+  if (isBalanceSheetUsdHeaderRow(table, row) && /^\d{4}$/.test(String(displayValue ?? ""))) {
+    return String(displayValue);
+  }
+  return formatReportNumber(displayValue);
+}
+
 function sourceColumnFromAddress(address) {
   const letters = String(address || "").match(/[A-Z]+/i)?.[0] || "";
   return [...letters.toUpperCase()].reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0);
@@ -1942,18 +1962,23 @@ function renderWorkbookReportTable(table) {
             </tr>
           </thead>
           <tbody>
-            ${(table.rows || []).map((row) => `
+            ${(table.rows || []).map((row) => {
+              const isProfitLoss = table.sheetName === "Balance Sheet" && String(row.label || "").trim().toLowerCase() === "profit/loss";
+              return `
+              ${isProfitLoss ? `<tr class="report-separator"><td colspan="${3 + periods.length}"></td></tr>` : ""}
               <tr class="${row.style || "line"} ${workbookRowClass(row)}">
                 <td class="sticky-label">${escapeHtml(row.label || "")}</td>
                 <td>${formatReportNumber(row.percent)}</td>
                 <td>${formatReportNumber(row.total)}</td>
                 ${(row.values || []).map((value) => {
-                  const numeric = Number(value);
+                  const displayValue = reportDisplayValue(table, row, value);
+                  const numeric = Number(displayValue);
                   const negative = Number.isFinite(numeric) && numeric < 0;
-                  return `<td class="${negative ? "negative" : ""}">${formatReportNumber(value)}</td>`;
+                  return `<td class="${negative ? "negative" : ""}">${escapeHtml(reportDisplayText(table, row, value))}</td>`;
                 }).join("")}
               </tr>
-            `).join("")}
+              `;
+            }).join("")}
           </tbody>
         </table>
       </div>
@@ -2124,6 +2149,10 @@ function reportCsv(selected) {
       ].map((row) => row.map(csvEscape).join(",")).join("\n");
     }
     const headers = ["Line item", "%", "Total", ...table.periods.map((period, index) => `${period.period} ${reportYearLabel(period, index)}`.trim())];
+    const rows = table.rows.flatMap((row) => {
+      const values = [row.label, row.percent, row.total, ...(row.values || []).map((value) => reportDisplayValue(table, row, value))];
+      return table.sheetName === "Balance Sheet" && String(row.label || "").trim().toLowerCase() === "profit/loss" ? [[], values] : [values];
+    });
     return [
       [state.projectData.company.name],
       [state.projectData.project.name],
@@ -2131,7 +2160,7 @@ function reportCsv(selected) {
       [`Figures in ${table.currency || reportingCurrency()}`],
       [],
       headers,
-      ...table.rows.map((row) => [row.label, row.percent, row.total, ...(row.values || [])]),
+      ...rows,
     ].map((row) => row.map(csvEscape).join(",")).join("\n");
   }
   const meta = [
