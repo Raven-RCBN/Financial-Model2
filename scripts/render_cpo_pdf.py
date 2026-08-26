@@ -6,11 +6,11 @@ from io import BytesIO
 from pathlib import Path
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 
-PAGE_WIDTH, PAGE_HEIGHT = landscape(A4)
+PAGE_WIDTH, PAGE_HEIGHT = A4
 MARGIN = 28
 INK = colors.HexColor("#082038")
 MUTED = colors.HexColor("#63788d")
@@ -72,13 +72,13 @@ def rounded_box(c, x, y, width, height, stroke=LINE, fill=colors.white, radius=7
 def draw_card(c, card, x, y, width, height):
     rounded_box(c, x, y, width, height)
     draw_text(c, card.get("label"), x + 10, y + height - 18, 8.5, INK, True)
-    draw_text(c, card.get("primary"), x + 10, y + height - 41, 16, INK, True)
+    draw_text(c, card.get("primary"), x + 10, y + height - 42, 16, INK, True)
     if card.get("primaryDelta"):
-        draw_text(c, card.get("primaryDelta"), x + 10, y + height - 55, 8.5, tone_color(card.get("primaryTone")), True)
+        draw_text(c, card.get("primaryDelta"), x + 10, y + height - 57, 8.5, tone_color(card.get("primaryTone")), True)
     if card.get("secondary"):
-        draw_text(c, card.get("secondary"), x + 10, y + 36, 15, INK, True)
+        draw_text(c, card.get("secondary"), x + 10, y + 42, 15, INK, True)
     if card.get("secondaryDelta"):
-        draw_text(c, card.get("secondaryDelta"), x + 10, y + 23, 8, tone_color(card.get("secondaryTone")), True)
+        draw_text(c, card.get("secondaryDelta"), x + 10, y + 29, 8, tone_color(card.get("secondaryTone")), True)
     footnote = card.get("footnote") or ""
     if card.get("negative"):
         footnote = f"{footnote} {card.get('negative')}".strip()
@@ -158,18 +158,18 @@ def draw_chart(c, curve, x, y, width, height):
 def draw_list(c, title, rows, x, y, width, height):
     rounded_box(c, x, y, width, height)
     draw_text(c, title, x + 10, y + height - 18, 10, INK, True)
-    row_y = y + height - 38
+    row_y = y + height - 34
     for label, value, tone in rows:
         c.setStrokeColor(colors.HexColor("#edf1f5"))
-        c.line(x + 10, row_y - 5, x + width - 10, row_y - 5)
+        c.line(x + 10, row_y - 4, x + width - 10, row_y - 4)
         draw_text(c, label, x + 10, row_y, 8.3, INK)
         draw_text(c, value, x + width - 10, row_y, 8.3, tone_color(tone), True, "right")
-        row_y -= 15
+        row_y -= 14
 
 
 def render(report):
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=landscape(A4))
+    c = canvas.Canvas(buffer, pagesize=A4)
     c.setTitle("CPO Report")
 
     c.setFillColor(SOFT_BLUE)
@@ -188,16 +188,20 @@ def render(report):
 
     cards = report.get("cards", [])[:4]
     card_gap = 8
-    card_width = (PAGE_WIDTH - 2 * MARGIN - 28 - 3 * card_gap) / 4
-    card_y = top - 128
+    content_width = PAGE_WIDTH - 2 * MARGIN - 28
+    card_width = (content_width - card_gap) / 2
+    card_height = 112
+    first_card_y = top - 158
+    second_card_y = first_card_y - card_height - 8
     for index, card in enumerate(cards):
-        draw_card(c, card, x + index * (card_width + card_gap), card_y, card_width, 108)
+        col = index % 2
+        row_y = first_card_y if index < 2 else second_card_y
+        draw_card(c, card, x + col * (card_width + card_gap), row_y, card_width, card_height)
 
-    draw_chart(c, report.get("curve", {}), x, 188, PAGE_WIDTH - 2 * MARGIN - 28, 202)
+    draw_chart(c, report.get("curve", {}), x, 300, content_width, 202)
 
-    bottom_width = (PAGE_WIDTH - 2 * MARGIN - 36) / 2
-    draw_list(c, "Where today sits", report.get("today", []), x, 46, bottom_width, 122)
-    draw_list(c, "Adjacent markets", report.get("adjacent", []), x + bottom_width + 8, 46, bottom_width, 122)
+    draw_list(c, "Where today sits", report.get("today", []), x, 168, content_width, 112)
+    draw_list(c, "Adjacent markets", report.get("adjacent", []), x, 46, content_width, 116)
 
     c.showPage()
     c.save()

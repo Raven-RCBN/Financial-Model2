@@ -1034,6 +1034,22 @@ function renderCpoMarketPdf() {
   return result.stdout;
 }
 
+function cpoReportDateSlug(report) {
+  const value = `${report?.refreshedAt || ""} ${report?.sourceUpdatedAt || ""} ${report?.cacheUpdatedAt || ""}`;
+  const iso = value.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dated = value.match(/\b(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\b/);
+  const months = {
+    jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+    jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+  };
+  if (dated) {
+    const [, day, month, year] = dated;
+    return `${year}-${months[month.toLowerCase()] || "01"}-${day.padStart(2, "0")}`;
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
 const MARKET_TICKER_TTL_MS = 5 * 60 * 1000;
 let marketTickerCache = null;
 
@@ -1410,9 +1426,10 @@ async function api(req, res, url) {
     });
   }
   if (req.method === "GET" && url.pathname === "/api/cpo-market/pdf") {
+    const report = await readCpoCache();
     const pdf = renderCpoMarketPdf();
     const disposition = url.searchParams.get("download") === "0" ? "inline" : "attachment";
-    res.setHeader("Content-Disposition", `${disposition}; filename="cpo-report.pdf"`);
+    res.setHeader("Content-Disposition", `${disposition}; filename="cpo-report-${cpoReportDateSlug(report)}.pdf"`);
     return send(req, res, 200, pdf, "application/pdf", {
       cacheControl: "no-store",
     });
