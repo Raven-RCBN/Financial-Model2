@@ -2484,7 +2484,16 @@ function renderLocalCpoOverviewPanel(report, refreshState = {}) {
       <div class="cpo-mini-source">
         <span>Source: Bursa Malaysia Derivatives</span>
         <span>Prev close: ${escapeHtml(report.previousClose || "")}</span>
-        <button class="secondary-button cpo-refresh-button" type="button" ${loading ? "disabled" : ""}>${loading ? "Refreshing..." : "Refresh"}</button>
+        <div class="cpo-action-row">
+          <button class="secondary-button cpo-refresh-button" type="button" ${loading ? "disabled" : ""}>${loading ? "Refreshing..." : "Refresh"}</button>
+          <a class="cpo-download-button" href="/api/cpo-market/pdf?download=1" title="Download CPO report PDF" aria-label="Download CPO report PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v12" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M5 21h14" />
+            </svg>
+          </a>
+        </div>
         <small class="${error || sourceError ? "is-error" : ""}">${escapeHtml(refreshNote)}</small>
       </div>
     </header>
@@ -2541,7 +2550,16 @@ async function loadLocalCpoOverviewPanel(refreshed = false) {
             <span class="eyebrow">Market Desk</span>
             <h3>CPO report</h3>
           </div>
-          <button class="secondary-button cpo-refresh-button" type="button">Refresh</button>
+          <div class="cpo-action-row">
+            <button class="secondary-button cpo-refresh-button" type="button">Refresh</button>
+            <a class="cpo-download-button" href="/api/cpo-market/pdf?download=1" title="Download CPO report PDF" aria-label="Download CPO report PDF">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v12" />
+                <path d="m7 10 5 5 5-5" />
+                <path d="M5 21h14" />
+              </svg>
+            </a>
+          </div>
         </header>
         <div class="empty-state">
           <strong>Local CPO cache not available</strong>

@@ -1022,6 +1022,18 @@ function renderPdfReport(projectId, sheetName) {
   return result.stdout;
 }
 
+function renderCpoMarketPdf() {
+  const script = path.join(__dirname, "scripts", "render_cpo_pdf.py");
+  const result = spawnSync(pythonPath, [script, cpoCachePath], {
+    encoding: "buffer",
+    maxBuffer: 12 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr.toString("utf8") || "CPO PDF generation failed");
+  }
+  return result.stdout;
+}
+
 const MARKET_TICKER_TTL_MS = 5 * 60 * 1000;
 let marketTickerCache = null;
 
@@ -1394,6 +1406,14 @@ async function api(req, res, url) {
   const indexes = buildIndexes(db);
   if (req.method === "GET" && url.pathname === "/api/cpo-market") {
     return send(req, res, 200, await readCpoCache(), "application/json; charset=utf-8", {
+      cacheControl: "no-store",
+    });
+  }
+  if (req.method === "GET" && url.pathname === "/api/cpo-market/pdf") {
+    const pdf = renderCpoMarketPdf();
+    const disposition = url.searchParams.get("download") === "0" ? "inline" : "attachment";
+    res.setHeader("Content-Disposition", `${disposition}; filename="cpo-report.pdf"`);
+    return send(req, res, 200, pdf, "application/pdf", {
       cacheControl: "no-store",
     });
   }
