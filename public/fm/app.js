@@ -40,6 +40,7 @@ const state = {
 
 const PROJECT_ID = "project_opsl_15000ha_development";
 const HIDDEN_REPORT_SHEETS = new Set(["Fund Req Aug26", "Bank Account Details", "OPSL AUG BUD req"]);
+const DEFAULT_BRAND_LOGO = "./public/agrinexus-logo.jpeg?v=4";
 
 if (window.location.protocol === "file:") {
   window.location.replace("http://127.0.0.1:4173/");
@@ -245,6 +246,14 @@ async function localRequestJson(path, options = {}) {
     return cloneLocal(payload);
   }
 
+  if (method === "PUT" && child === "branding") {
+    payload.project.settings ||= {};
+    payload.project.settings.brandingLogoUrl = body.logoDataUrl || payload.project.settings.brandingLogoUrl || DEFAULT_BRAND_LOGO;
+    payload.project.settings.brandingUpdatedAt = new Date().toISOString();
+    saveLocalProjectPayload(payload);
+    return cloneLocal({ ...payload, brandingLogoUrl: payload.project.settings.brandingLogoUrl });
+  }
+
   if (method === "PUT" && child === "input-table-cell") {
     const table = (payload.inputTables || []).find((item) => item.sheetName === body.sheetName);
     const row = (table?.rows || []).find((item) => Number(item.sourceRow) === Number(body.sourceRow));
@@ -320,6 +329,45 @@ function bindClick(selector, handler) {
 function bindEvent(selector, eventName, handler) {
   const element = qs(selector);
   if (element) element.addEventListener(eventName, handler);
+}
+
+function brandLogoUrl() {
+  return state.projectData?.project?.settings?.brandingLogoUrl || DEFAULT_BRAND_LOGO;
+}
+
+function applyBrandingLogo(src = brandLogoUrl()) {
+  qsa(".brand-logo").forEach((image) => {
+    image.src = src;
+  });
+  const preview = qs("#managementLogoPreview");
+  if (preview) preview.src = src;
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Logo file could not be read."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function previewBrandingLogoSelection(event) {
+  const file = event.target.files?.[0];
+  const status = qs("#brandingUploadStatus");
+  if (!file) return applyBrandingLogo();
+  if (!/^image\/(png|jpe?g|webp)$/i.test(file.type)) {
+    if (status) status.textContent = "Use PNG, JPG, or WebP.";
+    event.target.value = "";
+    return applyBrandingLogo();
+  }
+  const previewUrl = URL.createObjectURL(file);
+  const preview = qs("#managementLogoPreview");
+  if (preview) {
+    preview.onload = () => URL.revokeObjectURL(previewUrl);
+    preview.src = previewUrl;
+  }
+  if (status) status.textContent = `${file.name} ready to save.`;
 }
 
 function sheetByName(name) {
@@ -696,7 +744,11 @@ function renderManagementConsole() {
     .map((currency) => `<option value="${currency}" ${currency === reportingCurrency() ? "selected" : ""}>${currency}</option>`)
     .join("");
   qs("#managementConsoleStatus").textContent = `${company.name || "Company"} · ${project.name || "Project"} · ${reportingCurrency()} · starts ${reportStartYear()}`;
+  applyBrandingLogo();
+  const logoUpload = qs("#managementLogoUpload");
+  if (logoUpload) logoUpload.onchange = previewBrandingLogoSelection;
   bindClick("#saveManagementConsole", saveManagementConsole);
+  bindClick("#saveBrandingLogo", saveBrandingLogo);
   renderManagementStats();
   renderManagementGovernance();
   renderManagementCalculations();
@@ -1058,6 +1110,38 @@ async function saveManagementConsole() {
   renderInputs();
   renderReports();
   renderChecks();
+}
+
+async function saveBrandingLogo() {
+  const input = qs("#managementLogoUpload");
+  const status = qs("#brandingUploadStatus");
+  const file = input?.files?.[0];
+  if (!file) {
+    if (status) status.textContent = "Choose a logo first.";
+    return;
+  }
+  if (!/^image\/(png|jpe?g|webp)$/i.test(file.type)) {
+    if (status) status.textContent = "Use PNG, JPG, or WebP.";
+    return;
+  }
+  if (file.size > 3 * 1024 * 1024) {
+    if (status) status.textContent = "Logo must be under 3 MB.";
+    return;
+  }
+  try {
+    if (status) status.textContent = "Saving logo...";
+    const logoDataUrl = await readFileAsDataUrl(file);
+    state.projectData = await requestJson(`/api/projects/${PROJECT_ID}/branding`, {
+      method: "PUT",
+      body: JSON.stringify({ logoDataUrl }),
+    });
+    applyBrandingLogo(state.projectData.brandingLogoUrl || brandLogoUrl());
+    if (input) input.value = "";
+    if (status) status.textContent = "Logo saved.";
+  } catch (error) {
+    applyBrandingLogo();
+    if (status) status.textContent = error.message || "Logo could not be saved.";
+  }
 }
 
 function inputCellHasValue(cell) {
@@ -2529,6 +2613,7 @@ async function init() {
   ]);
   state.analysis = analysis;
   state.projectData = projectData;
+  applyBrandingLogo();
   renderMetrics();
   loadLocalCpoOverviewPanel();
   renderDependencies();

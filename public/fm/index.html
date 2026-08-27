@@ -6,13 +6,13 @@
     <title>Plantation Financial Model</title>
     <link rel="icon" type="image/png" sizes="32x32" href="./public/agrinexus-favicon-32.png?v=2" />
     <link rel="apple-touch-icon" sizes="180x180" href="./public/apple-touch-icon.png?v=2" />
-    <link rel="stylesheet" href="./styles.css?v=19" />
+    <link rel="stylesheet" href="./styles.css?v=20" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <div class="brand-lockup">
-          <img src="./public/agrinexus-logo.jpeg" alt="Agrinexus Intel logo" />
+          <img class="brand-logo" id="brandLogo" src="./public/agrinexus-logo.jpeg?v=4" alt="Agrinexus Intel logo" />
           <div>
             <span>Unified Advisory Product</span>
             <h1>Plantation Financial Model</h1>
@@ -210,6 +210,30 @@
                         <div><b>Draft model</b><span>Seeded workbook data is editable while finance reviews formula rules.</span></div>
                         <div><b>Controlled reports</b><span>Financial statements and PDF exports use the saved company, project, currency, and start-year settings.</span></div>
                         <div><b>Change trace</b><span>Input edits are saved into the local database and update linked reports.</span></div>
+                      </div>
+                    </article>
+                    <article class="mc-panel branding-panel">
+                      <header>
+                        <div>
+                          <span class="eyebrow">Branding</span>
+                          <h3>Company logo</h3>
+                        </div>
+                        <span class="status-pill">Header logo</span>
+                      </header>
+                      <div class="branding-editor">
+                        <div class="branding-preview">
+                          <img class="brand-logo" id="managementLogoPreview" src="./public/agrinexus-logo.jpeg?v=4" alt="Current company logo" />
+                        </div>
+                        <div class="branding-controls">
+                          <label class="field">
+                            <span>Upload logo</span>
+                            <input id="managementLogoUpload" type="file" accept="image/png,image/jpeg,image/webp" />
+                          </label>
+                          <footer class="management-footer">
+                            <span id="brandingUploadStatus">PNG, JPG, or WebP up to 3 MB.</span>
+                            <button class="primary-button" id="saveBrandingLogo"><span class="mini-icon">sv</span> Save Logo</button>
+                          </footer>
+                        </div>
                       </div>
                     </article>
                   </section>
@@ -481,6 +505,6 @@
         </section>
       </main>
     </div>
-    <script src="./app.js?v=19"></script>
+    <script src="./app.js?v=20"></script>
   </body>
 </html>

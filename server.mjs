@@ -12,6 +12,8 @@ const cpoCachePath = path.join(__dirname, "public-cpo-data.json");
 const publicRoot = __dirname;
 const port = Number(process.env.PORT || 4173);
 const pythonPath = process.env.PYTHON || "python3";
+const brandLogoDir = path.join(__dirname, "public");
+const mirroredBrandLogoDir = path.join(__dirname, "public", "fm", "public");
 const authUser = process.env.FM2_AUTH_USER || "finance";
 const authPassword = process.env.FM2_AUTH_PASSWORD || "Finance@123";
 const authSecret = process.env.FM2_AUTH_SECRET || "fm2-change-this-secret";
@@ -26,6 +28,7 @@ const mime = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
   ".svg": "image/svg+xml",
 };
 
@@ -79,6 +82,18 @@ function notFound(req, res) {
 
 function badRequest(req, res, message) {
   send(req, res, 400, { message });
+}
+
+function decodeBrandLogoDataUrl(value) {
+  const match = String(value || "").match(/^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (!match) return null;
+  const extension = match[1].toLowerCase().replace("jpeg", "jpg");
+  const buffer = Buffer.from(match[2].replace(/\s/g, ""), "base64");
+  if (buffer.length < 128 || buffer.length > 3 * 1024 * 1024) return null;
+  const isPng = extension === "png" && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isJpg = extension === "jpg" && buffer[0] === 0xff && buffer[1] === 0xd8;
+  const isWebp = extension === "webp" && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  return isPng || isJpg || isWebp ? { buffer, extension } : null;
 }
 
 function escapeHtml(value) {
@@ -1527,6 +1542,29 @@ async function api(req, res, url) {
 
     await writeDb(db);
     return send(req, res, 200, projectPayload(db, projectId));
+  }
+
+  if (req.method === "PUT" && child === "branding") {
+    const patch = await bodyJson(req);
+    const logo = decodeBrandLogoDataUrl(patch.logoDataUrl);
+    if (!logo) return badRequest(req, res, "Upload a PNG, JPG, or WebP logo under 3 MB.");
+
+    const fileName = `branding-logo.${logo.extension}`;
+    const cacheToken = Date.now();
+    const publicUrl = `/public/${fileName}?v=${cacheToken}`;
+    await Promise.all([brandLogoDir, mirroredBrandLogoDir].map((directory) => fs.mkdir(directory, { recursive: true })));
+    await Promise.all([
+      fs.writeFile(path.join(brandLogoDir, fileName), logo.buffer),
+      fs.writeFile(path.join(mirroredBrandLogoDir, fileName), logo.buffer),
+    ]);
+
+    const projectRecord = db.projects.find((record) => record.id === projectId);
+    if (!projectRecord) return notFound(req, res);
+    projectRecord.settings ||= {};
+    projectRecord.settings.brandingLogoUrl = publicUrl;
+    projectRecord.settings.brandingUpdatedAt = new Date(cacheToken).toISOString();
+    await writeDb(db);
+    return send(req, res, 200, { ...projectPayload(db, projectId), brandingLogoUrl: publicUrl });
   }
 
   if (req.method === "PUT" && child === "input-table-cell") {

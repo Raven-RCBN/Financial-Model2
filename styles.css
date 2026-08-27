@@ -57,8 +57,9 @@ button {
 .brand-lockup img {
   width: 54px;
   height: 54px;
-  object-fit: cover;
-  object-position: 50% 38%;
+  padding: 2px;
+  object-fit: contain;
+  object-position: center;
   border: 1px solid var(--line);
   background: #fff;
 }
@@ -2051,6 +2052,62 @@ p {
   color: var(--ink-soft, #17324a);
 }
 
+.branding-panel {
+  align-self: start;
+}
+
+.branding-editor {
+  padding: 15px;
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.branding-preview {
+  width: 116px;
+  height: 116px;
+  padding: 8px;
+  border: 1px solid #d7e5ef;
+  border-radius: 8px;
+  background: #f7fbfe;
+  display: grid;
+  place-items: center;
+}
+
+.branding-preview img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.branding-controls {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.branding-controls .field {
+  padding: 0;
+}
+
+.branding-controls input[type="file"] {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #cddae7;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink-soft, #17324a);
+  font-weight: 650;
+}
+
+.branding-controls .management-footer {
+  padding: 0;
+  border-top: 0;
+}
+
 .field {
   display: grid;
   gap: 6px;
@@ -2670,6 +2727,7 @@ p {
   .form-grid,
   .mc-stats,
   .management-setting-list,
+  .branding-editor,
   .management-grid,
   .formula-body,
   .formula-meta,
