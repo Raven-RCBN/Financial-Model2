@@ -178,7 +178,7 @@ def render(report):
 
     x = MARGIN + 14
     top = PAGE_HEIGHT - MARGIN - 18
-    draw_text(c, "MARKET DESK", x, top, 9, colors.HexColor("#0870c0"), True)
+    draw_text(c, "MARKET DESK · POWERED BY AGINTEL", x, top, 9, colors.HexColor("#0870c0"), True)
     draw_text(c, "CPO report", x, top - 18, 18, INK, True)
     draw_text(c, report.get("refreshedAt"), x, top - 32, 10, MUTED, True)
     draw_text(c, "Source: Bursa Malaysia Derivatives", PAGE_WIDTH - MARGIN - 14, top, 9, MUTED, True, "right")
@@ -202,6 +202,16 @@ def render(report):
 
     draw_list(c, "Where today sits", report.get("today", []), x, 168, content_width, 112)
     draw_list(c, "Adjacent markets", report.get("adjacent", []), x, 46, content_width, 116)
+    draw_text(
+        c,
+        "Produced by Agrinexus Intelligence · Public-source data, for information only",
+        PAGE_WIDTH / 2,
+        34,
+        7.4,
+        MUTED,
+        True,
+        "center",
+    )
 
     c.showPage()
     c.save()
