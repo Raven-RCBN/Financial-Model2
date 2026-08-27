@@ -16,9 +16,9 @@ export const metadata: Metadata = {
   title: "Financial Model 2",
   description: "Seeded OPSL plantation financial model test app.",
   icons: {
-    icon: "/fm/public/agrinexus-favicon-32.png",
-    shortcut: "/fm/public/agrinexus-favicon-32.png",
-    apple: "/fm/public/apple-touch-icon.png",
+    icon: "/fm/public/agrinexus-favicon-32.png?v=5",
+    shortcut: "/fm/public/agrinexus-favicon-32.png?v=5",
+    apple: "/fm/public/apple-touch-icon.png?v=5",
   },
 };
 
