@@ -32,6 +32,20 @@ const mime = {
   ".svg": "image/svg+xml",
 };
 
+const publicIconPaths = new Set([
+  "/favicon.ico",
+  "/public/agrinexus-favicon-32.png",
+  "/public/apple-touch-icon.png",
+  "/public/agrinexus-icon-192.png",
+  "/public/agrinexus-icon-512.png",
+  "/public/favicon.svg",
+  "/public/fm/public/agrinexus-favicon-32.png",
+  "/public/fm/public/apple-touch-icon.png",
+  "/public/fm/public/agrinexus-icon-192.png",
+  "/public/fm/public/agrinexus-icon-512.png",
+  "/public/fm/public/favicon.svg",
+]);
+
 async function readDb() {
   return JSON.parse(await fs.readFile(dbPath, "utf8"));
 }
@@ -180,6 +194,8 @@ function loginHtml(errorMessage = "", returnTo = "/") {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Financial Model 2 Login</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/public/agrinexus-favicon-32.png?v=6" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/public/apple-touch-icon.png?v=6" />
     <style>
       :root { color-scheme: light; font-family: Inter, Arial, sans-serif; }
       body {
@@ -1714,9 +1730,27 @@ async function staticFile(req, res, url) {
   }
 }
 
+async function publicIconFile(req, res, url) {
+  if (!publicIconPaths.has(url.pathname)) return false;
+  const filePath = url.pathname === "/favicon.ico" ? "/public/agrinexus-favicon-32.png" : decodeURIComponent(url.pathname);
+  const absolute = path.join(publicRoot, path.normalize(filePath).replace(/^(\.\.[/\\])+/, ""));
+  if (!absolute.startsWith(publicRoot)) return false;
+  try {
+    const data = await fs.readFile(absolute);
+    const ext = path.extname(absolute);
+    send(req, res, 200, data, mime[ext] || "application/octet-stream", {
+      cacheControl: "public, max-age=60, stale-while-revalidate=300",
+    });
+  } catch {
+    notFound(req, res);
+  }
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
+    if (req.method === "GET" && await publicIconFile(req, res, url)) return;
     if (url.pathname === "/" && req.method === "GET") return sendLoginPage(req, res, 200, "", "/app");
     if (url.pathname === "/app/") {
       res.writeHead(301, { Location: "/app", "Cache-Control": "no-store" });
