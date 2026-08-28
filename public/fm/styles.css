@@ -114,6 +114,25 @@ p {
   font-weight: 700;
 }
 
+.logout-link {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #cddae7;
+  border-radius: 6px;
+  color: var(--blue);
+  background: #f7fbff;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.logout-link:hover {
+  border-color: var(--blue);
+  background: #eef7ff;
+}
+
 .market-strip {
   margin: 20px auto 14px;
   width: calc(100% - 58px);
@@ -807,7 +826,7 @@ p {
   z-index: 2;
   background: #24476c;
   color: #fff;
-  font-weight: 650;
+  font-weight: 800;
 }
 
 .financial-grid thead tr:nth-child(2) th {
@@ -826,13 +845,13 @@ p {
 .financial-grid td.sticky-label {
   background: #fff;
   color: #17324a;
-  font-weight: 560;
+  font-weight: 700;
 }
 
 .financial-grid tr.section td {
   background: #dcecc6;
   color: #17324a;
-  font-weight: 680;
+  font-weight: 800;
   text-align: left;
 }
 
@@ -841,14 +860,25 @@ p {
 }
 
 .financial-grid tr.subheader td,
-.financial-grid tr.total td {
-  font-weight: 680;
+.financial-grid tr.total td,
+.financial-grid tr.workbook-header-row td,
+.financial-grid tr.workbook-total-row td,
+.financial-grid tr.workbook-subtotal-row td {
+  font-weight: 800;
+}
+
+.financial-grid tr.report-separator td {
+  height: 12px;
+  padding: 0;
+  border-left: 0;
+  border-right: 0;
+  background: #fff;
 }
 
 .financial-grid tr.blue-total td {
   background: #002060;
   color: #fff;
-  font-weight: 680;
+  font-weight: 800;
 }
 
 .financial-grid tr.blue-total td.sticky-label {
@@ -899,8 +929,11 @@ p {
 }
 
 .financial-grid.worksheet-grid td.bold,
-.financial-grid.worksheet-grid tr.subheader td {
-  font-weight: 650;
+.financial-grid.worksheet-grid tr.subheader td,
+.financial-grid.worksheet-grid tr.workbook-header-row td,
+.financial-grid.worksheet-grid tr.workbook-total-row td,
+.financial-grid.worksheet-grid tr.workbook-subtotal-row td {
+  font-weight: 800;
 }
 
 .financial-grid.worksheet-grid td.center {
@@ -1511,17 +1544,24 @@ p {
 .statement-scroll tr.subheader td,
 .statement-scroll tr.section td,
 .statement-scroll tr.subheader .sticky-label,
-.statement-scroll tr.section .sticky-label {
+.statement-scroll tr.section .sticky-label,
+.statement-scroll tr.workbook-header-row td,
+.statement-scroll tr.workbook-header-row .sticky-label {
   background: #eaf6fd;
+  font-weight: 800;
 }
 
 .statement-scroll tr.total td,
 .statement-scroll tr.blue-total td,
+.statement-scroll tr.workbook-total-row td,
+.statement-scroll tr.workbook-subtotal-row td,
 .statement-scroll tr.total .sticky-label,
-.statement-scroll tr.blue-total .sticky-label {
+.statement-scroll tr.blue-total .sticky-label,
+.statement-scroll tr.workbook-total-row .sticky-label,
+.statement-scroll tr.workbook-subtotal-row .sticky-label {
   border-top: 2px solid #aebfba;
   color: var(--ink);
-  font-weight: 760;
+  font-weight: 800;
 }
 
 .statement-scroll td.negative {
@@ -2851,6 +2891,13 @@ p {
   padding-top: 3px;
 }
 
+.cpo-action-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .cpo-refresh-button {
   min-height: 28px;
   padding: 5px 13px;
@@ -2859,6 +2906,33 @@ p {
   border-color: #b7ddc7;
   background: #f8fffb;
   font-size: 12px;
+}
+
+.cpo-download-button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #b7cce2;
+  border-radius: 7px;
+  background: #f7fbff;
+  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cpo-download-button:hover {
+  border-color: var(--blue);
+  background: #eef7ff;
+}
+
+.cpo-download-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .cpo-mini-kpis {
@@ -3218,6 +3292,7 @@ p {
 #inputs .financial-grid.input-grid th {
   height: 30px;
   padding: 5px 8px;
+  font-weight: 800;
 }
 
 #inputs .financial-grid.input-grid td.actions-col .row-actions {
@@ -3241,9 +3316,18 @@ p {
   height: 30px;
   padding: 0 8px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#inputs .financial-grid.input-grid td.bold .input-cell-control,
+#inputs .financial-grid.input-grid tr.subheader .input-cell-control,
+#inputs .financial-grid.input-grid tr.total .input-cell-control,
+#inputs .financial-grid.input-grid tr.workbook-header-row .input-cell-control,
+#inputs .financial-grid.input-grid tr.workbook-total-row .input-cell-control,
+#inputs .financial-grid.input-grid tr.workbook-subtotal-row .input-cell-control {
+  font-weight: 800;
 }
 
 #inputs .financial-grid.input-grid tr.dark td,
@@ -3257,7 +3341,7 @@ p {
 #inputs .financial-grid.input-grid td.dark-input-cell .input-cell-control,
 #inputs .financial-grid.input-grid .input-cell-control.on-dark {
   color: #f8fbff;
-  font-weight: 620;
+  font-weight: 800;
 }
 
 #inputs .financial-grid.input-grid tr.dark .input-cell-control::selection,

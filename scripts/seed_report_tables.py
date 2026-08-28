@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, time
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
@@ -14,6 +15,21 @@ DB = ROOT / "data" / "plantation-financial-model.db.json"
 
 COMPANY_ID = "company_opsl"
 PROJECT_ID = "project_opsl_15000ha_development"
+
+THEME_COLOR_ORDER = [
+    "lt1",
+    "dk1",
+    "lt2",
+    "dk2",
+    "accent1",
+    "accent2",
+    "accent3",
+    "accent4",
+    "accent5",
+    "accent6",
+    "hlink",
+    "folHlink",
+]
 
 SCHEDULE_CONFIGS = {
     "Financials": {
@@ -270,13 +286,92 @@ def sheet_slug(name):
     )
 
 
+def workbook_theme_colors(workbook):
+    if not workbook.loaded_theme:
+        return {}
+    root = ET.fromstring(workbook.loaded_theme)
+    namespace = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+    scheme = root.find(".//a:clrScheme", namespace)
+    colors = {}
+    if scheme is None:
+        return colors
+    for index, child in enumerate(list(scheme)):
+        key = child.tag.split("}", 1)[-1]
+        srgb = child.find(".//a:srgbClr", namespace)
+        system = child.find(".//a:sysClr", namespace)
+        value = None
+        if srgb is not None:
+            value = srgb.attrib.get("val")
+        elif system is not None:
+            value = system.attrib.get("lastClr")
+        if value:
+            colors[key] = value.upper()
+    return colors
+
+
+THEME_COLORS = {}
+
+
+def apply_tint(rgb, tint):
+    if not rgb or tint in (None, 0, 0.0):
+        return rgb
+    channels = [int(rgb[index : index + 2], 16) for index in (0, 2, 4)]
+    adjusted = []
+    for channel in channels:
+        if tint < 0:
+            value = channel * (1 + tint)
+        else:
+            value = channel * (1 - tint) + (255 * tint)
+        adjusted.append(max(0, min(255, round(value))))
+    return "".join(f"{channel:02X}" for channel in adjusted)
+
+
+def resolve_color(color):
+    if not color:
+        return ""
+    if color.type == "rgb" and color.rgb:
+        return color.rgb[-6:].upper()
+    if color.type == "theme" and color.theme is not None:
+        theme_key = THEME_COLOR_ORDER[color.theme] if color.theme < len(THEME_COLOR_ORDER) else str(color.theme)
+        rgb = THEME_COLORS.get(theme_key, "")
+        return apply_tint(rgb, color.tint or 0)
+    if color.type == "indexed" and color.indexed is not None:
+        indexed = {
+            0: "000000",
+            1: "FFFFFF",
+            2: "FF0000",
+            3: "00FF00",
+            4: "0000FF",
+            5: "FFFF00",
+            6: "FF00FF",
+            7: "00FFFF",
+            64: "",
+        }
+        return indexed.get(color.indexed, "")
+    return ""
+
+
 def fill_rgb(cell):
     if not cell.fill or not cell.fill.fill_type:
         return ""
-    color = cell.fill.fgColor
-    if color.type == "rgb" and color.rgb:
-        return color.rgb[-6:].upper()
-    return ""
+    return resolve_color(cell.fill.fgColor)
+
+
+def font_rgb(cell):
+    if not cell.font or not cell.font.color:
+        return ""
+    return resolve_color(cell.font.color)
+
+
+def excel_style(cell):
+    style = {}
+    fill = fill_rgb(cell)
+    font = font_rgb(cell)
+    if fill and fill != "FFFFFF":
+        style["fillColor"] = f"#{fill}"
+    if font and (font != "000000" or fill not in ("", "FFFFFF")):
+        style["fontColor"] = f"#{font}"
+    return style
 
 
 def is_dark_fill(rgb):
@@ -291,7 +386,7 @@ def cell_style(cell, value):
     style = []
     if cell.font.bold:
         style.append("bold")
-    if rgb:
+    if rgb and rgb != "FFFFFF":
         if rgb in {"002060", "1F4E79", "17365D", "244062"} or is_dark_fill(rgb):
             style.append("dark")
         elif rgb.startswith("FF") or rgb in {"FFC000", "FFFF00", "FFD966"}:
@@ -332,11 +427,15 @@ def column_label(value, fallback):
 def grid_cell(values_ws, styles_ws, row_number, col):
     value = values_ws.cell(row_number, col).value
     style_cell = styles_ws.cell(row_number, col)
-    return {
+    cell = {
         "address": f"{get_column_letter(col)}{row_number}",
         "value": scalar(value),
         "style": cell_style(style_cell, value),
     }
+    style = excel_style(style_cell)
+    if style:
+        cell["excelStyle"] = style
+    return cell
 
 
 def grid_has_meaningful_label(cells, first_label_index=0):
@@ -404,6 +503,7 @@ def extract_configured_grid(values_wb, styles_wb, sheet_name, config):
         "title": clean(ws.cell(title_row, title_col).value) or sheet_name,
         "subtitle": clean(ws.cell(subtitle_row, subtitle_col).value) or "",
         "reportTitle": clean(ws.cell(report_row, report_col).value) or sheet_name,
+        "titleStyle": excel_style(style_ws.cell(report_row, report_col)),
         "currency": "USD",
         "range": f"{get_column_letter(min_col)}{first_data_row}:{get_column_letter(max_col)}{max_row}",
         "columnCount": len(columns),
@@ -442,6 +542,49 @@ def style_for_schedule(ws, row, label_col, values):
     if bold and not has_values:
         return "subheader"
     return "line"
+
+
+def schedule_cell_styles(style_ws, row, config, label_col, periods):
+    styles = {
+        "label": excel_style(style_ws.cell(row, label_col)),
+        "values": [excel_style(style_ws.cell(row, period["column"])) for period in periods],
+    }
+    if config.get("percentCol"):
+        styles["percent"] = excel_style(style_ws.cell(row, config["percentCol"]))
+    if config.get("totalCol"):
+        styles["total"] = excel_style(style_ws.cell(row, config["totalCol"]))
+    compact = {key: value for key, value in styles.items() if key != "values" and value}
+    if any(styles["values"]):
+        compact["values"] = styles["values"]
+    return compact
+
+
+def schedule_header_styles(style_ws, config, periods):
+    period_row = config.get("periodRow") or config.get("startRow") or config.get("firstDataRow")
+    year_row = config.get("endRow") or period_row
+    label_col = config["labelCol"]
+    styles = {
+        "period": {
+            "label": excel_style(style_ws.cell(period_row, label_col)),
+            "percent": excel_style(style_ws.cell(period_row, config["percentCol"])) if config.get("percentCol") else {},
+            "total": excel_style(style_ws.cell(period_row, config["totalCol"])) if config.get("totalCol") else {},
+            "values": [excel_style(style_ws.cell(period_row, period["column"])) for period in periods],
+        },
+        "year": {
+            "label": excel_style(style_ws.cell(year_row, label_col)),
+            "percent": excel_style(style_ws.cell(year_row, config["percentCol"])) if config.get("percentCol") else {},
+            "total": excel_style(style_ws.cell(year_row, config["totalCol"])) if config.get("totalCol") else {},
+            "values": [excel_style(style_ws.cell(year_row, period["column"])) for period in periods],
+        },
+    }
+    compact = {}
+    for row_key, row_styles in styles.items():
+        row_compact = {key: value for key, value in row_styles.items() if key != "values" and value}
+        if any(row_styles["values"]):
+            row_compact["values"] = row_styles["values"]
+        if row_compact:
+            compact[row_key] = row_compact
+    return compact
 
 
 def extract_periods(ws, period_row, start_row, end_row, first_col, last_col):
@@ -485,6 +628,7 @@ def extract_schedule(values_wb, styles_wb, sheet_name, config):
         section = clean(ws.cell(row, config.get("sectionCol", config["labelCol"] - 1)).value)
         if section and not label:
             current_section = section
+            section_style_col = config.get("sectionCol") or config["labelCol"]
             rows.append(
                 {
                     "sourceRow": row,
@@ -495,6 +639,7 @@ def extract_schedule(values_wb, styles_wb, sheet_name, config):
                     "total": None,
                     "values": [],
                     "style": "section",
+                    "cellStyles": schedule_cell_styles(style_ws, row, config, section_style_col, []),
                 }
             )
             continue
@@ -513,6 +658,7 @@ def extract_schedule(values_wb, styles_wb, sheet_name, config):
                 "total": scalar(total),
                 "values": [scalar(value) for value in values],
                 "style": style_for_schedule(style_ws, row, actual_label_col, values),
+                "cellStyles": schedule_cell_styles(style_ws, row, config, actual_label_col, periods),
             }
         )
 
@@ -525,6 +671,8 @@ def extract_schedule(values_wb, styles_wb, sheet_name, config):
         "title": scalar(ws.cell(config["titleCell"][0], config["titleCell"][1]).value),
         "subtitle": scalar(ws.cell(config["subtitleCell"][0], config["subtitleCell"][1]).value),
         "reportTitle": scalar(ws.cell(config["reportTitleCell"][0], config["reportTitleCell"][1]).value),
+        "titleStyle": excel_style(style_ws.cell(config["reportTitleCell"][0], config["reportTitleCell"][1])),
+        "headerStyles": schedule_header_styles(style_ws, config, periods),
         "currency": "USD",
         "periods": periods,
         "columns": {
@@ -564,14 +712,7 @@ def extract_grid(values_wb, styles_wb, sheet_name, config=None):
         for col in range(min_col, max_col + 1):
             value = ws.cell(row_number, col).value
             has_value = has_value or value not in (None, "")
-            style_cell = style_ws.cell(row_number, col)
-            cells.append(
-                {
-                    "address": f"{get_column_letter(col)}{row_number}",
-                    "value": scalar(value),
-                    "style": cell_style(style_cell, value),
-                }
-            )
+            cells.append(grid_cell(ws, style_ws, row_number, col))
         if has_value:
             rows.append(
                 {
@@ -600,6 +741,7 @@ def extract_grid(values_wb, styles_wb, sheet_name, config=None):
         "title": title,
         "subtitle": subtitle,
         "reportTitle": sheet_name,
+        "titleStyle": excel_style(style_ws.cell(report_row, report_col)),
         "currency": "USD",
         "range": f"{get_column_letter(min_col)}{first_data_row}:{get_column_letter(max_col)}{max_row}",
         "columnCount": len(columns),
@@ -610,8 +752,10 @@ def extract_grid(values_wb, styles_wb, sheet_name, config=None):
 
 
 def main():
+    global THEME_COLORS
     values_wb = load_workbook(WORKBOOK, data_only=True, read_only=False)
     styles_wb = load_workbook(WORKBOOK, data_only=False, read_only=False)
+    THEME_COLORS = workbook_theme_colors(styles_wb)
     database = json.loads(DB.read_text())
     report_names = [report["sheetName"] for report in database.get("reportSnapshots", [])]
     report_tables = []

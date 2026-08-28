@@ -1902,6 +1902,18 @@ function reportTableForSheet(sheetName) {
   return (state.projectData.reportTables || []).find((table) => table.sheetName === sheetName);
 }
 
+function excelStyleAttr(style) {
+  if (!style) return "";
+  const rules = [];
+  if (/^#[0-9a-f]{6}$/i.test(style.fillColor || "")) rules.push(`background-color:${style.fillColor}`);
+  if (/^#[0-9a-f]{6}$/i.test(style.fontColor || "")) rules.push(`color:${style.fontColor}`);
+  return rules.length ? ` style="${rules.join(";")}"` : "";
+}
+
+function excelTitleStyleAttr(style) {
+  return style?.fillColor ? excelStyleAttr(style) : "";
+}
+
 function formatReportNumber(value) {
   if (value === null || value === undefined || value === "") return "-";
   const number = Number(String(value).replaceAll(",", ""));
@@ -2022,9 +2034,11 @@ function renderWorkbookReportTable(table) {
   }
   const periods = table.periods || [];
   const header = reportHeaderDetails(table, periods.length);
+  const periodHeader = table.headerStyles?.period || {};
+  const yearHeader = table.headerStyles?.year || {};
   return `
     <section class="report-output workbook-report">
-      <div class="workbook-report-title">
+      <div class="workbook-report-title"${excelTitleStyleAttr(table.titleStyle)}>
         <strong>${header.title}</strong>
         <span>${header.subtitle}</span>
         <b>${header.meta}</b>
@@ -2033,16 +2047,16 @@ function renderWorkbookReportTable(table) {
         <table class="financial-grid">
           <thead>
             <tr>
-              <th class="sticky-label">Line item</th>
-              <th>%</th>
-              <th>Total</th>
-              ${periods.map((period) => `<th>${period.period}</th>`).join("")}
+              <th class="sticky-label"${excelStyleAttr(periodHeader.label)}>Line item</th>
+              <th${excelStyleAttr(periodHeader.percent)}>%</th>
+              <th${excelStyleAttr(periodHeader.total)}>Total</th>
+              ${periods.map((period, index) => `<th${excelStyleAttr(periodHeader.values?.[index])}>${period.period}</th>`).join("")}
             </tr>
             <tr>
-              <th class="sticky-label"></th>
-              <th></th>
-              <th></th>
-              ${periods.map((period, index) => `<th>${reportYearLabel(period, index)}</th>`).join("")}
+              <th class="sticky-label"${excelStyleAttr(yearHeader.label)}></th>
+              <th${excelStyleAttr(yearHeader.percent)}></th>
+              <th${excelStyleAttr(yearHeader.total)}></th>
+              ${periods.map((period, index) => `<th${excelStyleAttr(yearHeader.values?.[index])}>${reportYearLabel(period, index)}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -2051,14 +2065,14 @@ function renderWorkbookReportTable(table) {
               return `
               ${isProfitLoss ? `<tr class="report-separator"><td colspan="${3 + periods.length}"></td></tr>` : ""}
               <tr class="${row.style || "line"} ${workbookRowClass(row)}">
-                <td class="sticky-label">${escapeHtml(row.label || "")}</td>
-                <td>${formatReportNumber(row.percent)}</td>
-                <td>${formatReportNumber(row.total)}</td>
-                ${(row.values || []).map((value) => {
+                <td class="sticky-label"${excelStyleAttr(row.cellStyles?.label)}>${escapeHtml(row.label || "")}</td>
+                <td${excelStyleAttr(row.cellStyles?.percent)}>${formatReportNumber(row.percent)}</td>
+                <td${excelStyleAttr(row.cellStyles?.total)}>${formatReportNumber(row.total)}</td>
+                ${(row.values || []).map((value, index) => {
                   const displayValue = reportDisplayValue(table, row, value);
                   const numeric = Number(displayValue);
                   const negative = Number.isFinite(numeric) && numeric < 0;
-                  return `<td class="${negative ? "negative" : ""}">${escapeHtml(reportDisplayText(table, row, value))}</td>`;
+                  return `<td class="${negative ? "negative" : ""}"${excelStyleAttr(row.cellStyles?.values?.[index])}>${escapeHtml(reportDisplayText(table, row, value))}</td>`;
                 }).join("")}
               </tr>
               `;
@@ -2075,7 +2089,7 @@ function renderWorkbookGridTable(table) {
   const display = displayWorkbookGrid(table);
   return `
     <section class="report-output workbook-report">
-      <div class="workbook-report-title">
+      <div class="workbook-report-title"${excelTitleStyleAttr(table.titleStyle)}>
         <strong>${header.title}</strong>
         <span>${header.subtitle}</span>
         <b>${header.meta}</b>
@@ -2090,7 +2104,7 @@ function renderWorkbookGridTable(table) {
                   const numeric = style.includes("number") || Number.isFinite(Number(String(cell.value ?? "").replaceAll(",", "")));
                   const negative = style.includes("negative") || Number(String(cell.value ?? "").replaceAll(",", "")) < 0;
                   const value = numeric ? formatReportNumber(cell.value) : (cell.value ?? "");
-                  return `<td class="${index === 0 ? "sticky-label" : ""} ${style} ${negative ? "negative" : ""}">${escapeHtml(value)}</td>`;
+                  return `<td class="${index === 0 ? "sticky-label" : ""} ${style} ${negative ? "negative" : ""}"${excelStyleAttr(cell.excelStyle)}>${escapeHtml(value)}</td>`;
                 }).join("")}
               </tr>
             `).join("")}

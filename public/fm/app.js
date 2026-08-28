@@ -460,12 +460,12 @@ function formatMoney(value) {
   }).format(converted)}`;
 }
 
-function formatNumber(value) {
+function formatNumber(value, options = {}) {
   const number = Number(value);
   if (!Number.isFinite(number)) return String(value ?? "");
   return new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: options.minimumFractionDigits ?? 0,
+    maximumFractionDigits: options.maximumFractionDigits ?? 4,
   }).format(number);
 }
 
@@ -493,6 +493,15 @@ function escapeHtml(value) {
 
 function rawInputCellValue(value) {
   if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+function displayWorkbookCellValue(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const text = String(value).trim();
+  if (text && Number.isFinite(Number(text.replaceAll(",", "")))) {
+    return formatNumber(Number(text.replaceAll(",", "")));
+  }
   return String(value);
 }
 
@@ -1178,6 +1187,16 @@ function inputCellIsDark(row, cell) {
   return style.includes("dark") || style.includes("blue-total");
 }
 
+function workbookRowClass(row) {
+  const labelText = (row?.label || row?.cells?.map((cell) => cell.value).join(" ") || "").toString().toLowerCase();
+  const style = String(row?.style || "").toLowerCase();
+  const classes = [];
+  if (style.includes("header") || style.includes("section")) classes.push("workbook-header-row");
+  if (style.includes("total") || /\btotal\b/.test(labelText)) classes.push("workbook-total-row");
+  if (style.includes("subtotal") || /\bsub[-\s]?total\b/.test(labelText)) classes.push("workbook-subtotal-row");
+  return classes.join(" ");
+}
+
 function renderInputWorkbookTable(table) {
   const rows = usefulInputRows(table);
   const pageSize = state.inputPageSize;
@@ -1213,7 +1232,7 @@ function renderInputWorkbookTable(table) {
           </thead>
           <tbody>
             ${pageRows.map((row) => `
-              <tr class="${row.style || "line"}">
+              <tr class="${row.style || "line"} ${workbookRowClass(row)}">
                 ${visibleColumns.map(({ index }, visibleIndex) => {
                   const cell = (row.cells || [])[index] || {
                     address: inputCellAddress(table, row, index),
@@ -1223,11 +1242,14 @@ function renderInputWorkbookTable(table) {
                   const style = cell.style || "";
                   const numeric = style.includes("number");
                   const darkCell = inputCellIsDark(row, cell);
-                  const value = rawInputCellValue(cell.value);
+                  const value = numeric ? displayWorkbookCellValue(cell.value) : rawInputCellValue(cell.value);
+                  const savedValue = numeric && cell.value !== "" && cell.value !== null && cell.value !== undefined
+                    ? String(Number(String(cell.value).replaceAll(",", "")))
+                    : rawInputCellValue(cell.value);
                   const address = cell.address || inputCellAddress(table, row, index);
                   return `
                     <td class="${visibleIndex === 0 ? "sticky-label" : ""} ${style} ${darkCell ? "dark-input-cell" : ""}">
-                      <input class="input-cell-control ${numeric ? "numeric" : ""} ${darkCell ? "on-dark" : ""}" data-sheet-name="${escapeHtml(table.sheetName)}" data-address="${escapeHtml(address)}" value="${escapeHtml(value)}" title="${escapeHtml(value)}" />
+                      <input class="input-cell-control ${numeric ? "numeric" : ""} ${darkCell ? "on-dark" : ""}" data-sheet-name="${escapeHtml(table.sheetName)}" data-address="${escapeHtml(address)}" data-last-saved-value="${escapeHtml(savedValue)}" value="${escapeHtml(value)}" title="${escapeHtml(value)}" />
                     </td>
                   `;
                 }).join("")}
@@ -1580,7 +1602,7 @@ function renderStatementTable({ title, note, table, rows, maxPeriods = 27 }) {
           </thead>
           <tbody>
             ${rows.map((row) => `
-              <tr class="${row.style || "line"}">
+              <tr class="${row.style || "line"} ${workbookRowClass(row)}">
                 <td class="sticky-label">${escapeHtml(row.label || "")}</td>
                 ${(row.values || []).slice(0, maxPeriods).map(reportTableCell).join("")}
               </tr>
@@ -1880,16 +1902,48 @@ function reportTableForSheet(sheetName) {
   return (state.projectData.reportTables || []).find((table) => table.sheetName === sheetName);
 }
 
+function excelStyleAttr(style) {
+  if (!style) return "";
+  const rules = [];
+  if (/^#[0-9a-f]{6}$/i.test(style.fillColor || "")) rules.push(`background-color:${style.fillColor}`);
+  if (/^#[0-9a-f]{6}$/i.test(style.fontColor || "")) rules.push(`color:${style.fontColor}`);
+  return rules.length ? ` style="${rules.join(";")}"` : "";
+}
+
+function excelTitleStyleAttr(style) {
+  return style?.fillColor ? excelStyleAttr(style) : "";
+}
+
 function formatReportNumber(value) {
   if (value === null || value === undefined || value === "") return "-";
-  const number = Number(value);
+  const number = Number(String(value).replaceAll(",", ""));
   if (!Number.isFinite(number)) return String(value);
-  if (Math.abs(number) < 0.005) return "-";
+  if (Math.abs(number) < 0.00005) return "-";
   const text = new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
   }).format(Math.abs(number));
   return number < 0 ? `(${text})` : text;
+}
+
+function isBalanceSheetUsdHeaderRow(table, row) {
+  return table?.sheetName === "Balance Sheet" && String(row?.label || "").trim().toLowerCase() === "(all in usd nearest thousand)";
+}
+
+function reportDisplayValue(table, row, value) {
+  if (isBalanceSheetUsdHeaderRow(table, row)) {
+    const match = String(value ?? "").match(/^(\d{4})-\d{2}-\d{2}(?:t.*)?$/i);
+    if (match) return match[1];
+  }
+  return value;
+}
+
+function reportDisplayText(table, row, value) {
+  const displayValue = reportDisplayValue(table, row, value);
+  if (isBalanceSheetUsdHeaderRow(table, row) && /^\d{4}$/.test(String(displayValue ?? ""))) {
+    return String(displayValue);
+  }
+  return formatReportNumber(displayValue);
 }
 
 function sourceColumnFromAddress(address) {
@@ -1980,9 +2034,11 @@ function renderWorkbookReportTable(table) {
   }
   const periods = table.periods || [];
   const header = reportHeaderDetails(table, periods.length);
+  const periodHeader = table.headerStyles?.period || {};
+  const yearHeader = table.headerStyles?.year || {};
   return `
     <section class="report-output workbook-report">
-      <div class="workbook-report-title">
+      <div class="workbook-report-title"${excelTitleStyleAttr(table.titleStyle)}>
         <strong>${header.title}</strong>
         <span>${header.subtitle}</span>
         <b>${header.meta}</b>
@@ -1991,31 +2047,36 @@ function renderWorkbookReportTable(table) {
         <table class="financial-grid">
           <thead>
             <tr>
-              <th class="sticky-label">Line item</th>
-              <th>%</th>
-              <th>Total</th>
-              ${periods.map((period) => `<th>${period.period}</th>`).join("")}
+              <th class="sticky-label"${excelStyleAttr(periodHeader.label)}>Line item</th>
+              <th${excelStyleAttr(periodHeader.percent)}>%</th>
+              <th${excelStyleAttr(periodHeader.total)}>Total</th>
+              ${periods.map((period, index) => `<th${excelStyleAttr(periodHeader.values?.[index])}>${period.period}</th>`).join("")}
             </tr>
             <tr>
-              <th class="sticky-label"></th>
-              <th></th>
-              <th></th>
-              ${periods.map((period, index) => `<th>${reportYearLabel(period, index)}</th>`).join("")}
+              <th class="sticky-label"${excelStyleAttr(yearHeader.label)}></th>
+              <th${excelStyleAttr(yearHeader.percent)}></th>
+              <th${excelStyleAttr(yearHeader.total)}></th>
+              ${periods.map((period, index) => `<th${excelStyleAttr(yearHeader.values?.[index])}>${reportYearLabel(period, index)}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
-            ${(table.rows || []).map((row) => `
-              <tr class="${row.style || "line"}">
-                <td class="sticky-label">${row.label || ""}</td>
-                <td>${formatReportNumber(row.percent)}</td>
-                <td>${formatReportNumber(row.total)}</td>
-                ${(row.values || []).map((value) => {
-                  const numeric = Number(value);
+            ${(table.rows || []).map((row) => {
+              const isProfitLoss = table.sheetName === "Balance Sheet" && String(row.label || "").trim().toLowerCase() === "profit/loss";
+              return `
+              ${isProfitLoss ? `<tr class="report-separator"><td colspan="${3 + periods.length}"></td></tr>` : ""}
+              <tr class="${row.style || "line"} ${workbookRowClass(row)}">
+                <td class="sticky-label"${excelStyleAttr(row.cellStyles?.label)}>${escapeHtml(row.label || "")}</td>
+                <td${excelStyleAttr(row.cellStyles?.percent)}>${formatReportNumber(row.percent)}</td>
+                <td${excelStyleAttr(row.cellStyles?.total)}>${formatReportNumber(row.total)}</td>
+                ${(row.values || []).map((value, index) => {
+                  const displayValue = reportDisplayValue(table, row, value);
+                  const numeric = Number(displayValue);
                   const negative = Number.isFinite(numeric) && numeric < 0;
-                  return `<td class="${negative ? "negative" : ""}">${formatReportNumber(value)}</td>`;
+                  return `<td class="${negative ? "negative" : ""}"${excelStyleAttr(row.cellStyles?.values?.[index])}>${escapeHtml(reportDisplayText(table, row, value))}</td>`;
                 }).join("")}
               </tr>
-            `).join("")}
+              `;
+            }).join("")}
           </tbody>
         </table>
       </div>
@@ -2028,7 +2089,7 @@ function renderWorkbookGridTable(table) {
   const display = displayWorkbookGrid(table);
   return `
     <section class="report-output workbook-report">
-      <div class="workbook-report-title">
+      <div class="workbook-report-title"${excelTitleStyleAttr(table.titleStyle)}>
         <strong>${header.title}</strong>
         <span>${header.subtitle}</span>
         <b>${header.meta}</b>
@@ -2037,13 +2098,13 @@ function renderWorkbookGridTable(table) {
         <table class="financial-grid worksheet-grid ${table.presentation || ""} ${display.compacted ? "compact-report-grid" : ""}">
           <tbody>
             ${display.rows.map((row) => `
-              <tr class="${row.style || "line"}">
+              <tr class="${row.style || "line"} ${workbookRowClass(row)}">
                 ${(row.cells || []).map((cell, index) => {
                   const style = cell.style || "";
-                  const numeric = style.includes("number");
-                  const negative = style.includes("negative");
+                  const numeric = style.includes("number") || Number.isFinite(Number(String(cell.value ?? "").replaceAll(",", "")));
+                  const negative = style.includes("negative") || Number(String(cell.value ?? "").replaceAll(",", "")) < 0;
                   const value = numeric ? formatReportNumber(cell.value) : (cell.value ?? "");
-                  return `<td class="${index === 0 ? "sticky-label" : ""} ${style} ${negative ? "negative" : ""}">${escapeHtml(value)}</td>`;
+                  return `<td class="${index === 0 ? "sticky-label" : ""} ${style} ${negative ? "negative" : ""}"${excelStyleAttr(cell.excelStyle)}>${escapeHtml(value)}</td>`;
                 }).join("")}
               </tr>
             `).join("")}
@@ -2186,6 +2247,10 @@ function reportCsv(selected) {
       ].map((row) => row.map(csvEscape).join(",")).join("\n");
     }
     const headers = ["Line item", "%", "Total", ...table.periods.map((period, index) => `${period.period} ${reportYearLabel(period, index)}`.trim())];
+    const rows = table.rows.flatMap((row) => {
+      const values = [row.label, row.percent, row.total, ...(row.values || []).map((value) => reportDisplayValue(table, row, value))];
+      return table.sheetName === "Balance Sheet" && String(row.label || "").trim().toLowerCase() === "profit/loss" ? [[], values] : [values];
+    });
     return [
       [state.projectData.company.name],
       [state.projectData.project.name],
@@ -2193,7 +2258,7 @@ function reportCsv(selected) {
       [`Figures in ${table.currency || reportingCurrency()}`],
       [],
       headers,
-      ...table.rows.map((row) => [row.label, row.percent, row.total, ...(row.values || [])]),
+      ...rows,
     ].map((row) => row.map(csvEscape).join(",")).join("\n");
   }
   const meta = [
@@ -2517,7 +2582,16 @@ function renderLocalCpoOverviewPanel(report, refreshState = {}) {
       <div class="cpo-mini-source">
         <span>Source: Bursa Malaysia Derivatives</span>
         <span>Prev close: ${escapeHtml(report.previousClose || "")}</span>
-        <button class="secondary-button cpo-refresh-button" type="button" ${loading ? "disabled" : ""}>${loading ? "Refreshing..." : "Refresh"}</button>
+        <div class="cpo-action-row">
+          <button class="secondary-button cpo-refresh-button" type="button" ${loading ? "disabled" : ""}>${loading ? "Refreshing..." : "Refresh"}</button>
+          <a class="cpo-download-button" href="/api/cpo-market/pdf?download=1" title="Download CPO report PDF" aria-label="Download CPO report PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v12" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M5 21h14" />
+            </svg>
+          </a>
+        </div>
         <small class="${error || sourceError ? "is-error" : ""}">${escapeHtml(refreshNote)}</small>
       </div>
     </header>
@@ -2574,7 +2648,16 @@ async function loadLocalCpoOverviewPanel(refreshed = false) {
             <span class="eyebrow">Market Desk</span>
             <h3>CPO report</h3>
           </div>
-          <button class="secondary-button cpo-refresh-button" type="button">Refresh</button>
+          <div class="cpo-action-row">
+            <button class="secondary-button cpo-refresh-button" type="button">Refresh</button>
+            <a class="cpo-download-button" href="/api/cpo-market/pdf?download=1" title="Download CPO report PDF" aria-label="Download CPO report PDF">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v12" />
+                <path d="m7 10 5 5 5-5" />
+                <path d="M5 21h14" />
+              </svg>
+            </a>
+          </div>
         </header>
         <div class="empty-state">
           <strong>Local CPO cache not available</strong>
