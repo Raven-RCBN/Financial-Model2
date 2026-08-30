@@ -5,6 +5,14 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
+import {
+  allAuditEntries,
+  auditReportDefaults,
+  auditReportDefaultsByYear,
+  createAuditEntry,
+  listAuditEntries,
+  seedAuditEntries,
+} from "./audit/audit-store.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.FM2_DB_PATH || path.join(__dirname, "data", "plantation-financial-model.db.json");
@@ -14,11 +22,13 @@ const port = Number(process.env.PORT || 4173);
 const pythonPath = process.env.PYTHON || "python3";
 const brandLogoDir = path.join(__dirname, "public");
 const mirroredBrandLogoDir = path.join(__dirname, "public", "fm", "public");
-const authUser = process.env.FM2_AUTH_USER || "finance";
-const authPassword = process.env.FM2_AUTH_PASSWORD || "Finance@123";
 const authSecret = process.env.FM2_AUTH_SECRET || "fm2-change-this-secret";
 const authCookieName = "fm2_session";
 const sessionTtlMs = 12 * 60 * 60 * 1000;
+const authUsers = [
+  { userId: process.env.FM2_AUTH_USER || "finance", password: process.env.FM2_AUTH_PASSWORD || "Finance@123", role: "finance" },
+  { userId: process.env.FM2_ADMIN_USER || "admin", password: process.env.FM2_ADMIN_PASSWORD || "Admin@123", role: "admin" },
+];
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -149,17 +159,35 @@ function createSessionToken(userId) {
   return `${payload}.${sessionSignature(payload)}`;
 }
 
-function hasValidSession(req) {
+function userById(userId) {
+  return authUsers.find((user) => user.userId === userId) || null;
+}
+
+function currentSession(req) {
   const token = parseCookies(req.headers.cookie)[authCookieName];
-  if (!token) return false;
+  if (!token) return null;
   const [payload, signature] = token.split(".");
-  if (!payload || !signature || !timingSafeTextEqual(signature, sessionSignature(payload))) return false;
+  if (!payload || !signature || !timingSafeTextEqual(signature, sessionSignature(payload))) return null;
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return session.userId === authUser && Number(session.expiresAt) > Date.now();
+    const user = userById(session.userId);
+    if (!user || Number(session.expiresAt) <= Date.now()) return null;
+    return { userId: user.userId, role: user.role, expiresAt: Number(session.expiresAt) };
   } catch {
-    return false;
+    return null;
   }
+}
+
+function hasValidSession(req) {
+  return Boolean(currentSession(req));
+}
+
+function isAuditAdmin(req) {
+  return currentSession(req)?.role === "admin";
+}
+
+function forbidden(req, res, message = "Forbidden") {
+  return send(req, res, 403, { message }, "application/json; charset=utf-8", { cacheControl: "no-store" });
 }
 
 function cookieOptions(req, maxAgeSeconds = Math.floor(sessionTtlMs / 1000)) {
@@ -274,13 +302,14 @@ async function handleLogin(req, res, url) {
   const body = new URLSearchParams(await requestBodyText(req));
   const userId = body.get("userid") || body.get("userId") || body.get("username") || "";
   const password = body.get("password") || "";
-  if (!timingSafeTextEqual(userId, authUser) || !timingSafeTextEqual(password, authPassword)) {
+  const user = authUsers.find((candidate) => timingSafeTextEqual(userId, candidate.userId));
+  if (!user || !timingSafeTextEqual(password, user.password)) {
     return sendLoginPage(req, res, 401, "Invalid user ID or password.", returnTo);
   }
 
   res.writeHead(303, {
     Location: returnTo,
-    "Set-Cookie": `${authCookieName}=${encodeURIComponent(createSessionToken(authUser))}; ${cookieOptions(req)}`,
+    "Set-Cookie": `${authCookieName}=${encodeURIComponent(createSessionToken(user.userId))}; ${cookieOptions(req)}`,
     "Cache-Control": "no-store",
   });
   res.end();
@@ -1065,6 +1094,19 @@ function renderCpoMarketPdf() {
   return result.stdout;
 }
 
+function renderAuditPdfReport(projectId, payload) {
+  const script = path.join(__dirname, "audit", "render_audit_pdf.py");
+  const result = spawnSync(pythonPath, [script, dbPath, projectId], {
+    input: JSON.stringify(payload || {}),
+    encoding: null,
+    maxBuffer: 40 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr.toString("utf8") || "Audit PDF generation failed");
+  }
+  return result.stdout;
+}
+
 function cpoReportDateSlug(report) {
   const value = `${report?.refreshedAt || ""} ${report?.sourceUpdatedAt || ""} ${report?.cacheUpdatedAt || ""}`;
   const iso = value.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
@@ -1079,6 +1121,12 @@ function cpoReportDateSlug(report) {
     return `${year}-${months[month.toLowerCase()] || "01"}-${day.padStart(2, "0")}`;
   }
   return new Date().toISOString().slice(0, 10);
+}
+
+function auditReportDateSlug(settings = {}) {
+  const value = settings.auditIssueDate || settings.issueDate || "";
+  const iso = String(value).match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  return iso ? `${iso[1]}-${iso[2]}-${iso[3]}` : new Date().toISOString().slice(0, 10);
 }
 
 const MARKET_TICKER_TTL_MS = 5 * 60 * 1000;
@@ -1470,6 +1518,9 @@ async function api(req, res, url) {
       cacheControl: "no-store",
     });
   }
+  if (req.method === "GET" && url.pathname === "/api/session") {
+    return send(req, res, 200, currentSession(req), "application/json; charset=utf-8", { cacheControl: "no-store" });
+  }
   if (req.method === "GET" && url.pathname === "/api/companies") return send(req, res, 200, pageItems(db.companies, url, 25, 100));
   if (req.method === "GET" && url.pathname === "/api/projects") {
     const companyId = url.searchParams.get("companyId");
@@ -1500,6 +1551,35 @@ async function api(req, res, url) {
     const records = filterCollection(payload.reportSnapshots, url, ["sheetName", "dimensions", "status"]);
     return send(req, res, 200, pageItems(records, url, 20, 100));
   }
+  if (child === "audit-seed") {
+    if (!isAuditAdmin(req)) return forbidden(req, res, "Audit access requires the admin user.");
+    if (req.method !== "POST") return notFound(req, res);
+    return send(req, res, 200, await seedAuditEntries(dbPath, projectId, url.searchParams.get("auditYear") || ""), "application/json; charset=utf-8", { cacheControl: "no-store" });
+  }
+  if (child === "audit-entries") {
+    if (!isAuditAdmin(req)) return forbidden(req, res, "Audit access requires the admin user.");
+    if (req.method === "GET") {
+      return send(req, res, 200, await listAuditEntries(dbPath, projectId, {
+        page: url.searchParams.get("page"),
+        pageSize: url.searchParams.get("pageSize"),
+        q: url.searchParams.get("q") || "",
+        department: url.searchParams.get("department") || "",
+        status: url.searchParams.get("status") || "",
+        auditYear: url.searchParams.get("auditYear") || "",
+      }), "application/json; charset=utf-8", { cacheControl: "no-store" });
+    }
+    if (req.method === "POST") {
+      try {
+        const patch = await bodyJson(req);
+        const result = await createAuditEntry(dbPath, projectId, patch);
+        return send(req, res, 201, result, "application/json; charset=utf-8", { cacheControl: "no-store" });
+      } catch (error) {
+        if (error.statusCode === 400) return badRequest(req, res, error.message);
+        throw error;
+      }
+    }
+    return notFound(req, res);
+  }
   if (req.method === "GET" && child === "report-pdf") {
     const sheetName = url.searchParams.get("sheetName");
     if (!sheetName) return badRequest(req, res, "sheetName is required");
@@ -1509,6 +1589,28 @@ async function api(req, res, url) {
     res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
     return send(req, res, 200, pdf, "application/pdf", {
       cacheControl: "private, max-age=30, stale-while-revalidate=120",
+    });
+  }
+  if (req.method === "POST" && child === "audit-pdf") {
+    if (!isAuditAdmin(req)) return forbidden(req, res, "Audit access requires the admin user.");
+    const patch = await bodyJson(req);
+    const auditYear = String(patch.auditYear || url.searchParams.get("auditYear") || "");
+    const entries = Array.isArray(patch.entries) && patch.entries.length ? patch.entries : await allAuditEntries(dbPath, projectId, auditYear);
+    const baseReportSettings = auditReportDefaultsByYear[auditYear] || auditReportDefaults;
+    const reportSettings = {
+      ...baseReportSettings,
+      ...(patch.reportSettings && typeof patch.reportSettings === "object" ? patch.reportSettings : {}),
+    };
+    const pdf = renderAuditPdfReport(projectId, {
+      entries,
+      reportSettings,
+      brandingLogoUrl: patch.brandingLogoUrl,
+    });
+    const disposition = url.searchParams.get("download") === "0" ? "inline" : "attachment";
+    const yearSegment = auditYear ? `${auditYear}-` : "";
+    res.setHeader("Content-Disposition", `${disposition}; filename="oban-audit-report-${yearSegment}${auditReportDateSlug(reportSettings)}.pdf"`);
+    return send(req, res, 200, pdf, "application/pdf", {
+      cacheControl: "no-store",
     });
   }
   if (req.method === "GET" && child === "formulas") {
@@ -1554,6 +1656,27 @@ async function api(req, res, url) {
     if (patch.startYear !== undefined) {
       const year = Number(patch.startYear);
       if (Number.isFinite(year)) projectRecord.settings.startYear = Math.trunc(year);
+    }
+    if (patch.auditReport && typeof patch.auditReport === "object") {
+      const current = projectRecord.settings.auditReport && typeof projectRecord.settings.auditReport === "object"
+        ? projectRecord.settings.auditReport
+        : {};
+      const allowed = [
+        "auditReportTitle",
+        "auditClientName",
+        "auditLocation",
+        "auditPreparedBy",
+        "auditPeriodStart",
+        "auditPeriodEnd",
+        "auditIssueDate",
+        "auditConfidentiality",
+      ];
+      projectRecord.settings.auditReport = { ...current };
+      for (const key of allowed) {
+        if (typeof patch.auditReport[key] === "string") {
+          projectRecord.settings.auditReport[key] = patch.auditReport[key].trim();
+        }
+      }
     }
 
     await writeDb(db);

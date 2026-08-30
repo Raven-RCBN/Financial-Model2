@@ -15,6 +15,23 @@ const state = {
   inputPageSize: 24,
   selectedManagementTab: "settings",
   selectedRoleId: "administrator",
+  selectedAuditPanel: "entry",
+  auditYear: "2025",
+  currentSession: null,
+  auditEntries: null,
+  auditPage: 1,
+  auditPageSize: 5,
+  auditTotal: 0,
+  auditBackend: "",
+  auditLoading: false,
+  auditSearch: "",
+  auditSearchTimer: null,
+  auditDraftImage: null,
+  auditDraftImageName: "",
+  auditDraftGeo: null,
+  auditCameraOpen: false,
+  auditCameraStream: null,
+  auditCameraError: "",
   managementRoles: [
     { id: "administrator", name: "Administrator", note: "Full tenant control" },
     { id: "finance-controller", name: "Finance Controller", note: "Approve and lock periods" },
@@ -41,6 +58,136 @@ const state = {
 const PROJECT_ID = "project_opsl_15000ha_development";
 const HIDDEN_REPORT_SHEETS = new Set(["Fund Req Aug26", "Bank Account Details", "OPSL AUG BUD req"]);
 const DEFAULT_BRAND_LOGO = "./public/agrinexus-logo.jpeg?v=4";
+const AUDIT_STORAGE_KEY = "fm2.auditEntries.v1";
+const AUDIT_DEPARTMENTS = [
+  "Mill Department",
+  "Plantation - Overall",
+  "Plantation - Old Palm Division",
+  "Plantation - RO Division",
+  "Plantation - 2018 Division",
+  "Plantation - 2019 Division",
+  "Plantation - 2022 Division",
+  "Plantation - 2025 New Development",
+  "Accounts Department",
+  "Accounts Department - Main Store",
+  "Jobbing SOP",
+  "Fleet Department",
+  "Road and Bridges",
+  "Procurement Department",
+  "Nursery Department",
+  "Security Department",
+  "HRA Department",
+  "HSE - Buildings Upkeep",
+  "HSE Department",
+  "HSE - CSR",
+  "IT Department",
+  "Audit Department",
+];
+const AUDIT_AREAS = [
+  "SOP compliance",
+  "Safety and PPE",
+  "Stock and inventory",
+  "Field maintenance",
+  "Harvesting quality",
+  "Fleet and assets",
+  "Roads and housing",
+  "Workforce and attendance",
+  "Finance documents",
+  "Environmental controls",
+];
+const AUDIT_REPORT_DEFAULTS_BY_YEAR = {
+  2025: {
+    auditReportTitle: "2025 Internal Audit Report",
+    auditClientName: "JB FARMS OBAN Plantation",
+    auditLocation: "Cross River State, Nigeria",
+    auditPreparedBy: "Agrinexus International",
+    auditPeriodStart: "2025-10-25",
+    auditPeriodEnd: "2025-11-06",
+    auditIssueDate: "2026-06-23",
+    auditConfidentiality: "Private & Confidential",
+  },
+  2024: {
+    auditReportTitle: "2024 Internal Audit Report",
+    auditClientName: "JB FARMS OBAN Plantation",
+    auditLocation: "Cross River State, Nigeria",
+    auditPreparedBy: "Agrinexus International",
+    auditPeriodStart: "2024-11-21",
+    auditPeriodEnd: "2024-11-21",
+    auditIssueDate: "2025-05-28",
+    auditConfidentiality: "Private & Confidential",
+  },
+};
+const AUDIT_REPORT_DEFAULTS = AUDIT_REPORT_DEFAULTS_BY_YEAR["2025"];
+const AUDIT_SEED_ENTRIES = [
+  {
+    id: "audit_seed_nursery",
+    department: "Nursery Department",
+    area: "Environmental controls",
+    priority: "High",
+    location: "Nursery store rear",
+    finding: "Plastic bag waste and substandard or torn polybags were observed around the nursery area.",
+    impact: "Poor waste control can affect nursery hygiene, seedling quality, and audit compliance.",
+    recommendation: "Clear accumulated waste, segregate damaged polybags, and add weekly nursery housekeeping evidence.",
+    owner: "Nursery Manager",
+    dueDate: "2026-09-15",
+    status: "Open",
+    geo: { latitude: 5.9246, longitude: 8.3297, accuracy: 24 },
+    photoName: "Seeded audit evidence",
+    source: "OBAN AUDIT REPORT 2025",
+    capturedAt: "2026-08-30T04:30:00.000Z",
+  },
+  {
+    id: "audit_seed_fleet",
+    department: "Fleet Department",
+    area: "Fleet and assets",
+    priority: "High",
+    location: "Fleet workshop",
+    finding: "Vehicle logbooks were incomplete and several hour meters were reported as non-functional.",
+    impact: "Fuel monitoring, repair planning, and equipment utilisation cannot be reliably verified.",
+    recommendation: "Make logbook updates mandatory per shift and repair or replace non-functional hour meters.",
+    owner: "Fleet Supervisor",
+    dueDate: "2026-09-20",
+    status: "In progress",
+    geo: { latitude: 5.9262, longitude: 8.3331, accuracy: 31 },
+    photoName: "Seeded audit evidence",
+    source: "OBAN AUDIT REPORT 2025",
+    capturedAt: "2026-08-30T04:36:00.000Z",
+  },
+  {
+    id: "audit_seed_mill",
+    department: "Mill Department",
+    area: "SOP compliance",
+    priority: "Medium",
+    location: "Mill process line",
+    finding: "CPO FFA levels were recorded above benchmark tolerance during the audit period.",
+    impact: "Out-of-range FFA readings may reduce product quality and sales value if corrective action is delayed.",
+    recommendation: "Track FFA by processing batch, escalate repeated exceptions, and link readings to evacuation timing.",
+    owner: "Mill Manager",
+    dueDate: "2026-09-10",
+    status: "Open",
+    geo: { latitude: 5.9275, longitude: 8.3312, accuracy: 18 },
+    photoName: "Seeded audit evidence",
+    source: "OBAN AUDIT REPORT 2025",
+    capturedAt: "2026-08-30T04:42:00.000Z",
+  },
+  {
+    id: "audit_seed_accounts",
+    department: "Accounts Department",
+    area: "Finance documents",
+    priority: "High",
+    location: "Accounts office",
+    finding: "Petty cash transfers and supporting documentation were not consistently aligned with records.",
+    impact: "Weak evidence trails increase the risk of unreconciled payments and delayed management review.",
+    recommendation: "Require payment support packs, daily RPV updates, and reviewer sign-off before month-end close.",
+    owner: "Finance Controller",
+    dueDate: "2026-09-12",
+    status: "Open",
+    geo: { latitude: 5.9258, longitude: 8.3279, accuracy: 28 },
+    photoName: "Seeded audit evidence",
+    source: "OBAN AUDIT REPORT 2025",
+    capturedAt: "2026-08-30T04:48:00.000Z",
+  },
+];
 
 if (window.location.protocol === "file:") {
   window.location.replace("http://127.0.0.1:4173/");
@@ -56,6 +203,7 @@ async function requestJson(path, options) {
       ...options,
     });
     if (response.ok) return response.json();
+    if (response.status === 401 || response.status === 403) throw new Error(`Request failed: ${response.status}`);
     if (!usesLocalFallback(path)) throw new Error(`Request failed: ${response.status}`);
   } catch (error) {
     if (!usesLocalFallback(path)) throw error;
@@ -189,6 +337,9 @@ function localSyncMetrics(payload) {
 }
 
 async function localRequestJson(path, options = {}) {
+  if (String(path).startsWith("/api/session")) {
+    return { userId: "admin", role: "admin", expiresAt: Date.now() + 12 * 60 * 60 * 1000 };
+  }
   if (String(path).startsWith("/api/cpo-market")) {
     const response = await fetch("./public-cpo-data.json", { cache: "no-store" });
     if (!response.ok) throw new Error("Cached CPO market data is unavailable");
@@ -200,6 +351,36 @@ async function localRequestJson(path, options = {}) {
   const child = url.pathname.match(/^\/api\/projects\/[^/]+\/?([^/]*)/)?.[1] || "";
   const method = String(options.method || "GET").toUpperCase();
   const body = options.body ? JSON.parse(options.body) : {};
+
+  if (child === "audit-entries") {
+    const current = auditEntries();
+    if (method === "POST") {
+      const entry = {
+        ...body,
+        id: body.id || `audit_${Date.now()}`,
+        projectId: PROJECT_ID,
+        auditYear: body.auditYear || state.auditYear,
+        capturedAt: body.capturedAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      saveAuditEntries([entry, ...current.filter((item) => item.id !== entry.id)]);
+      return { backend: "local", entry };
+    }
+    const page = Math.max(1, Number(url.searchParams.get("page") || state.auditPage || 1));
+    const pageSize = Math.max(1, Number(url.searchParams.get("pageSize") || state.auditPageSize || 5));
+    const q = String(url.searchParams.get("q") || "").toLowerCase();
+    const auditYear = String(url.searchParams.get("auditYear") || state.auditYear || "");
+    const filtered = current
+      .filter((entry) => !auditYear || String(entry.auditYear || "2025") === auditYear)
+      .filter((entry) => !q || [entry.department, entry.location, entry.finding].some((value) => String(value || "").toLowerCase().includes(q)));
+    const start = (page - 1) * pageSize;
+    return { backend: "local", page, pageSize, total: filtered.length, items: filtered.slice(start, start + pageSize) };
+  }
+
+  if (child === "audit-seed") {
+    saveAuditEntries(AUDIT_SEED_ENTRIES.slice());
+    return { backend: "local", seeded: AUDIT_SEED_ENTRIES.length };
+  }
 
   if (method === "GET" && child === "market-ticker") {
     const items = (payload.marketData || []).map((item) => ({
@@ -242,6 +423,7 @@ async function localRequestJson(path, options = {}) {
     payload.project.settings ||= {};
     payload.project.settings.reportingCurrency = body.reportingCurrency || payload.project.settings.reportingCurrency;
     payload.project.settings.startYear = Number(body.startYear || payload.project.settings.startYear || 2026);
+    payload.project.settings.auditReport = { ...auditReportSettings(), ...(body.auditReport || {}) };
     saveLocalProjectPayload(payload);
     return cloneLocal(payload);
   }
@@ -402,6 +584,34 @@ function projectSettings() {
     currencyRates: { USD: 1 },
     supportedReportingCurrencies: ["USD"],
   };
+}
+
+function auditReportSettings(year = state.auditYear || "2025") {
+  const base = AUDIT_REPORT_DEFAULTS_BY_YEAR[String(year)] || AUDIT_REPORT_DEFAULTS;
+  const custom = projectSettings().auditReport || {};
+  if (String(year) === "2025") return { ...base, ...custom };
+  return {
+    ...base,
+    auditClientName: custom.auditClientName || base.auditClientName,
+    auditLocation: custom.auditLocation || base.auditLocation,
+    auditPreparedBy: custom.auditPreparedBy || base.auditPreparedBy,
+    auditConfidentiality: custom.auditConfidentiality || base.auditConfidentiality,
+  };
+}
+
+function canAccessAudit() {
+  return state.currentSession?.role === "admin";
+}
+
+function applySessionUi() {
+  const sessionUser = qs("#sessionUser");
+  if (sessionUser) sessionUser.value = state.currentSession?.userId || "";
+  qsa("[data-admin-only='true']").forEach((element) => {
+    element.hidden = !canAccessAudit();
+  });
+  if (!canAccessAudit() && state.selectedAuditPanel) {
+    state.selectedAuditPanel = "entry";
+  }
 }
 
 function reportingCurrency() {
@@ -745,10 +955,19 @@ function renderManagementConsole() {
   const company = state.projectData.company || {};
   const project = state.projectData.project || {};
   const settings = projectSettings();
+  const auditSettings = auditReportSettings();
   const supported = settings.supportedReportingCurrencies?.length ? settings.supportedReportingCurrencies : ["USD"];
   qs("#managementCompanyName").value = company.name || "";
   qs("#managementProjectName").value = project.name || "";
   qs("#managementStartYear").value = reportStartYear();
+  qs("#managementAuditReportTitle").value = auditSettings.auditReportTitle || "";
+  qs("#managementAuditClientName").value = auditSettings.auditClientName || "";
+  qs("#managementAuditLocation").value = auditSettings.auditLocation || "";
+  qs("#managementAuditPreparedBy").value = auditSettings.auditPreparedBy || "";
+  qs("#managementAuditPeriodStart").value = auditSettings.auditPeriodStart || "";
+  qs("#managementAuditPeriodEnd").value = auditSettings.auditPeriodEnd || "";
+  qs("#managementAuditIssueDate").value = auditSettings.auditIssueDate || "";
+  qs("#managementAuditConfidentiality").value = auditSettings.auditConfidentiality || "";
   qs("#managementReportingCurrency").innerHTML = supported
     .map((currency) => `<option value="${currency}" ${currency === reportingCurrency() ? "selected" : ""}>${currency}</option>`)
     .join("");
@@ -1110,6 +1329,16 @@ async function saveManagementConsole() {
       projectName: qs("#managementProjectName").value.trim(),
       reportingCurrency: qs("#managementReportingCurrency").value,
       startYear: Number.isFinite(startYear) ? Math.trunc(startYear) : 2026,
+      auditReport: {
+        auditReportTitle: qs("#managementAuditReportTitle").value.trim(),
+        auditClientName: qs("#managementAuditClientName").value.trim(),
+        auditLocation: qs("#managementAuditLocation").value.trim(),
+        auditPreparedBy: qs("#managementAuditPreparedBy").value.trim(),
+        auditPeriodStart: qs("#managementAuditPeriodStart").value,
+        auditPeriodEnd: qs("#managementAuditPeriodEnd").value,
+        auditIssueDate: qs("#managementAuditIssueDate").value,
+        auditConfidentiality: qs("#managementAuditConfidentiality").value.trim(),
+      },
     }),
   });
   renderMetrics();
@@ -1118,6 +1347,7 @@ async function saveManagementConsole() {
   renderManagementConsole();
   renderInputs();
   renderReports();
+  renderAudit();
   renderChecks();
 }
 
@@ -2289,6 +2519,22 @@ function downloadText(filename, text, type = "text/csv;charset=utf-8") {
   URL.revokeObjectURL(url);
 }
 
+function filenameFromDisposition(header, fallback) {
+  const match = String(header || "").match(/filename="?([^";]+)"?/i);
+  return match ? match[1] : fallback;
+}
+
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function downloadSelectedReport() {
   const selected = selectedReportSnapshot();
   if (!selected) return;
@@ -2417,6 +2663,712 @@ function renderReports() {
       renderReports();
     });
   });
+}
+
+function auditEntries() {
+  if (Array.isArray(state.auditEntries)) return state.auditEntries;
+  try {
+    const stored = JSON.parse(localStorage.getItem(AUDIT_STORAGE_KEY) || "null");
+    state.auditEntries = Array.isArray(stored) && stored.length ? stored : AUDIT_SEED_ENTRIES.slice();
+  } catch {
+    state.auditEntries = AUDIT_SEED_ENTRIES.slice();
+  }
+  return state.auditEntries;
+}
+
+function saveAuditEntries(entries) {
+  state.auditEntries = entries;
+  localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(entries));
+}
+
+async function loadAuditEntries() {
+  if (!canAccessAudit()) return [];
+  state.auditLoading = true;
+  const params = new URLSearchParams({
+    page: String(state.auditPage),
+    pageSize: String(state.auditPageSize),
+    auditYear: String(state.auditYear),
+  });
+  if (state.auditSearch.trim()) params.set("q", state.auditSearch.trim());
+  try {
+    const result = await requestJson(`/api/projects/${PROJECT_ID}/audit-entries?${params.toString()}`, {
+      credentials: "same-origin",
+    });
+    state.auditEntries = Array.isArray(result.items) ? result.items : [];
+    state.auditTotal = Number(result.total || state.auditEntries.length);
+    state.auditPage = Number(result.page || state.auditPage);
+    state.auditPageSize = Number(result.pageSize || state.auditPageSize);
+    state.auditBackend = result.backend || "";
+  } finally {
+    state.auditLoading = false;
+  }
+  return state.auditEntries;
+}
+
+function auditPaginationLabel() {
+  const total = Number(state.auditTotal || 0);
+  if (!total) return "0 findings";
+  const start = (state.auditPage - 1) * state.auditPageSize + 1;
+  const end = Math.min(total, state.auditPage * state.auditPageSize);
+  return `${start}-${end} of ${total.toLocaleString()} findings`;
+}
+
+function auditPriorityClass(priority) {
+  const value = String(priority || "").toLowerCase();
+  if (value === "critical") return "critical";
+  if (value === "high") return "high";
+  if (value === "medium") return "med";
+  return "low";
+}
+
+function auditStatusClass(status) {
+  const value = String(status || "").toLowerCase();
+  if (value.includes("closed")) return "low";
+  if (value.includes("progress")) return "med";
+  return "high";
+}
+
+function auditDateLabel(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function auditSummary(entries) {
+  const departments = new Set(entries.map((entry) => entry.department).filter(Boolean));
+  const highCount = entries.filter((entry) => ["critical", "high"].includes(String(entry.priority).toLowerCase())).length;
+  const evidenceCount = entries.filter((entry) => entry.photoDataUrl || entry.photoUrl || entry.photoName).length;
+  const openCount = entries.filter((entry) => String(entry.status || "").toLowerCase() !== "closed").length;
+  return [
+    ["Findings", entries.length.toLocaleString(), "Captured observations"],
+    ["High priority", highCount.toLocaleString(), "Critical and high risk"],
+    ["Departments", departments.size.toLocaleString(), "Covered by report"],
+    ["Evidence", evidenceCount.toLocaleString(), "Photo or source tags"],
+    ["Open actions", openCount.toLocaleString(), "Pending closure"],
+  ];
+}
+
+function auditDepartmentRows(entries) {
+  const groups = entries.reduce((result, entry) => {
+    const key = entry.department || "Unassigned";
+    result[key] ||= { total: 0, high: 0, medium: 0, low: 0, open: 0 };
+    result[key].total += 1;
+    if (String(entry.priority).toLowerCase() === "high" || String(entry.priority).toLowerCase() === "critical") result[key].high += 1;
+    if (String(entry.priority).toLowerCase() === "medium") result[key].medium += 1;
+    if (String(entry.priority).toLowerCase() === "low") result[key].low += 1;
+    if (String(entry.status).toLowerCase() !== "closed") result[key].open += 1;
+    return result;
+  }, {});
+  return Object.entries(groups).sort((a, b) => b[1].high - a[1].high || b[1].total - a[1].total || a[0].localeCompare(b[0]));
+}
+
+function auditOptions(options, selected) {
+  return options.map((option) => `<option ${option === selected ? "selected" : ""}>${escapeHtml(option)}</option>`).join("");
+}
+
+function renderAuditEntry(entries) {
+  const today = new Date().toISOString().slice(0, 10);
+  const latest = entries[0];
+  const geo = state.auditDraftGeo;
+  const image = state.auditDraftImage;
+  return `
+    <div class="audit-workspace">
+      <article class="panel audit-form-panel">
+        <header>
+          <div>
+            <span class="eyebrow">Data Entry</span>
+            <h3>Mobile field audit form</h3>
+          </div>
+          <span class="status-pill">${state.auditBackend ? `${escapeHtml(state.auditBackend)} backend` : "Backend data entry"}</span>
+        </header>
+        <div class="audit-form-grid">
+          <label class="field">
+            <span>Report year</span>
+            <select id="auditEntryYear">
+              ${["2025", "2024"].map((year) => `<option value="${year}" ${year === String(state.auditYear) ? "selected" : ""}>${year}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Department</span>
+            <select id="auditDepartment">${auditOptions(AUDIT_DEPARTMENTS, "Mill Department")}</select>
+          </label>
+          <label class="field">
+            <span>Audit area</span>
+            <select id="auditArea">${auditOptions(AUDIT_AREAS, "SOP compliance")}</select>
+          </label>
+          <label class="field">
+            <span>Priority</span>
+            <select id="auditPriority">
+              <option>High</option>
+              <option>Medium</option>
+              <option>Low</option>
+              <option>Critical</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Status</span>
+            <select id="auditStatus">
+              <option>Open</option>
+              <option>In progress</option>
+              <option>Closed</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Division, block, or location</span>
+            <input id="auditLocation" placeholder="Example: 2019 Block A6, mill line, main store" />
+          </label>
+          <label class="field">
+            <span>Responsible owner</span>
+            <input id="auditOwner" placeholder="Department HOD or action owner" />
+          </label>
+          <label class="field">
+            <span>Target closure date</span>
+            <input id="auditDueDate" type="date" value="${today}" />
+          </label>
+          <label class="field">
+            <span>Reference / asset tag</span>
+            <input id="auditReference" placeholder="Optional asset, invoice, block, or SOP reference" />
+          </label>
+          <label class="field wide">
+            <span>Observations / Findings</span>
+            <textarea id="auditFinding" rows="4" placeholder="Write the audit issue observed in the field."></textarea>
+          </label>
+          <label class="field wide">
+            <span>Impact</span>
+            <textarea id="auditImpact" rows="3" placeholder="Describe operational, financial, safety, compliance, or quality impact."></textarea>
+          </label>
+          <label class="field wide">
+            <span>Recommendation / Corrective action</span>
+            <textarea id="auditRecommendation" rows="3" placeholder="State corrective action, prevention control, and evidence required for closure."></textarea>
+          </label>
+        </div>
+        <div class="audit-evidence-grid">
+          <section class="audit-evidence-card">
+            <div>
+              <span class="mini-icon">ph</span>
+              <b>Photo evidence</b>
+              <small>Upload an existing image or take a field photo on mobile.</small>
+            </div>
+            <div class="audit-photo-actions">
+              <label class="secondary-button" for="auditUploadInput">Upload image</label>
+              <button class="primary-button" id="startAuditCamera" type="button"><span class="mini-icon">cm</span> Take photo</button>
+            </div>
+            <input class="audit-file-input" id="auditUploadInput" type="file" accept="image/*" />
+            <input class="audit-file-input" id="auditCameraInput" type="file" accept="image/*" capture="environment" />
+            ${state.auditCameraOpen ? `
+              <div class="audit-camera-capture">
+                <video id="auditCameraPreview" autoplay playsinline muted></video>
+                <div class="audit-camera-actions">
+                  <button class="secondary-button" id="cancelAuditCamera" type="button">Cancel</button>
+                  <button class="primary-button" id="captureAuditCamera" type="button"><span class="mini-icon">cm</span> Capture Photo</button>
+                </div>
+                <span id="auditCameraStatus">${escapeHtml(state.auditCameraError || "Starting camera...")}</span>
+              </div>
+            ` : ""}
+            ${image ? `<img class="audit-photo-preview" src="${image}" alt="Audit evidence preview" />` : `<div class="audit-empty-photo">No image selected</div>`}
+            <span id="auditPhotoStatus">${image ? escapeHtml(state.auditDraftImageName || "Image ready") : "Attach or capture field evidence."}</span>
+          </section>
+          <section class="audit-evidence-card">
+            <div>
+              <span class="mini-icon">gp</span>
+              <b>Map location proof</b>
+              <small>Captured automatically in the background when a field photo is taken.</small>
+            </div>
+            <div class="audit-geo-readout" id="auditGeoStatus">
+              ${renderAuditGeoReadout(geo)}
+            </div>
+            <span id="auditGeoHelper">Uploads can be saved without map proof. Camera capture attempts GPS automatically.</span>
+          </section>
+        </div>
+        <footer class="audit-form-footer">
+          <span id="auditSaveStatus">Findings are saved to the Audit backend for reporting.</span>
+          <div class="action-row">
+            <button class="secondary-button" id="clearAuditDraft">Clear</button>
+            <button class="primary-button" id="saveAuditEntry"><span class="mini-icon">sv</span> Save Finding</button>
+          </div>
+        </footer>
+      </article>
+      <aside class="audit-side-stack">
+        <article class="panel">
+          <header>
+            <div>
+              <span class="eyebrow">Recommended Controls</span>
+              <h3>Field audit features</h3>
+            </div>
+          </header>
+          <div class="audit-feature-list">
+            <div><b>Mandatory photo and GPS</b><span>Require both for critical and high-priority findings.</span></div>
+            <div><b>Offline drafts</b><span>Save entries locally during estate visits, then sync once online.</span></div>
+            <div><b>Before and after evidence</b><span>Attach closure photos when corrective actions are completed.</span></div>
+            <div><b>Owner workflow</b><span>Assign HOD, due date, management response, and closure status.</span></div>
+            <div><b>Reference tags</b><span>Link finding to block, asset, SOP, invoice, GRN, or stock item.</span></div>
+          </div>
+        </article>
+        <article class="panel audit-recent-panel">
+          <header>
+            <div>
+              <span class="eyebrow">Latest Finding</span>
+              <h3>${latest ? escapeHtml(latest.department) : "No entries"}</h3>
+            </div>
+            ${latest ? `<span class="risk ${auditPriorityClass(latest.priority)}">${escapeHtml(latest.priority)}</span>` : ""}
+          </header>
+          ${latest ? `
+            <div class="audit-latest">
+              <b>${escapeHtml(latest.finding)}</b>
+              <span>${escapeHtml(latest.location || "Location pending")}</span>
+              <small>${auditDateLabel(latest.capturedAt)} - ${escapeHtml(latest.status)}</small>
+              <button class="secondary-button" id="openAuditReport">Open Report</button>
+            </div>
+          ` : ""}
+        </article>
+      </aside>
+    </div>
+  `;
+}
+
+function renderAuditReport(entries) {
+  const rows = auditDepartmentRows(entries);
+  const settings = auditReportSettings();
+  const auditPeriod = `${auditDateLabel(settings.auditPeriodStart)} to ${auditDateLabel(settings.auditPeriodEnd)}`;
+  return `
+    <div class="audit-report-layout">
+      <article class="panel audit-report-panel">
+        <header>
+          <div>
+            <span class="eyebrow">Report</span>
+            <h3>OBAN internal audit report - ${escapeHtml(state.auditYear)}</h3>
+          </div>
+          <div class="input-actions">
+            <button class="action-icon edit" id="printAuditReport" title="Print or save report" aria-label="Print or save report">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v7H6z" /></svg>
+            </button>
+            <button class="action-icon add" id="downloadAuditReport" title="Download report draft" aria-label="Download report draft">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+            </button>
+          </div>
+        </header>
+        <div class="audit-report-tools">
+          <label>
+            <span>Report year</span>
+            <select id="auditReportYear">
+              ${["2025", "2024"].map((year) => `<option value="${year}" ${year === String(state.auditYear) ? "selected" : ""}>${year}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            <span>Search findings</span>
+            <input id="auditSearch" value="${escapeHtml(state.auditSearch)}" placeholder="Department, issue, or location" />
+          </label>
+          <label>
+            <span>Rows</span>
+            <select id="auditPageSize">
+              ${[5, 10, 20, 50].map((size) => `<option value="${size}" ${size === state.auditPageSize ? "selected" : ""}>${size}</option>`).join("")}
+            </select>
+          </label>
+          <div class="audit-pagination" aria-label="Audit report pagination">
+            <button class="secondary-button" id="auditPrevPage" ${state.auditPage <= 1 ? "disabled" : ""}>Prev</button>
+            <span>${escapeHtml(auditPaginationLabel())}</span>
+            <button class="secondary-button" id="auditNextPage" ${state.auditPage * state.auditPageSize >= state.auditTotal ? "disabled" : ""}>Next</button>
+          </div>
+        </div>
+        <div class="audit-report-page" id="auditReportPage">
+          <div class="audit-report-cover">
+            <img class="brand-logo" src="${escapeHtml(brandLogoUrl())}" alt="Agrinexus logo" />
+            <div>
+              <span>${escapeHtml(settings.auditConfidentiality)}</span>
+              <h3>${escapeHtml(settings.auditReportTitle)}</h3>
+              <p>${escapeHtml(settings.auditClientName)} - ${escapeHtml(settings.auditLocation)}</p>
+              <small>Prepared by: ${escapeHtml(settings.auditPreparedBy)} - Audit period: ${escapeHtml(auditPeriod)} - Date of issue: ${auditDateLabel(settings.auditIssueDate)}</small>
+            </div>
+          </div>
+          <div class="audit-summary-grid">
+            ${auditSummary(entries).map(([label, value, note]) => `
+              <div>
+                <span>${escapeHtml(label)}</span>
+                <b>${escapeHtml(value)}</b>
+                <small>${escapeHtml(note)}</small>
+              </div>
+            `).join("")}
+          </div>
+          <section class="audit-report-section">
+            <h4>Audit Findings by Department</h4>
+            <div class="audit-table-scroll">
+              <table class="audit-table">
+                <thead>
+                  <tr><th>Department</th><th>Total</th><th>High</th><th>Medium</th><th>Low</th><th>Open</th></tr>
+                </thead>
+                <tbody>
+                  ${rows.map(([department, counts]) => `
+                    <tr>
+                      <td>${escapeHtml(department)}</td>
+                      <td>${counts.total}</td>
+                      <td>${counts.high}</td>
+                      <td>${counts.medium}</td>
+                      <td>${counts.low}</td>
+                      <td>${counts.open}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section class="audit-report-section">
+            <h4>Detailed Findings</h4>
+            <div class="audit-finding-list">
+              ${entries.map((entry, index) => `
+                <article class="audit-finding-card">
+                  <header>
+                    <div>
+                      <span>Audit Issue ${index + 1}: ${escapeHtml(entry.department)}</span>
+                      <h5>${escapeHtml(entry.area || "Audit observation")}</h5>
+                    </div>
+                    <b class="risk ${auditPriorityClass(entry.priority)}">${escapeHtml(entry.priority)}</b>
+                  </header>
+                  <div class="audit-finding-body">
+                    <div><b>Observations / Findings</b><span>${escapeHtml(entry.finding)}</span></div>
+                    <div><b>Impact</b><span>${escapeHtml(entry.impact)}</span></div>
+                    <div><b>Recommendation</b><span>${escapeHtml(entry.recommendation)}</span></div>
+                    <div class="audit-response-row">
+                      <span><b>Owner</b>${escapeHtml(entry.owner || "-")}</span>
+                      <span><b>Timeline</b>${auditDateLabel(entry.dueDate)}</span>
+                      <span><b>Status</b><em class="risk ${auditStatusClass(entry.status)}">${escapeHtml(entry.status || "Open")}</em></span>
+                    </div>
+                    <div class="audit-evidence-row">
+                      ${entry.photoDataUrl || entry.photoUrl ? `<img src="${escapeHtml(entry.photoDataUrl || entry.photoUrl)}" alt="Audit evidence" />` : `<div class="audit-photo-token">${escapeHtml(entry.photoName || "Evidence pending")}</div>`}
+                      <span>${escapeHtml(entry.location || "Location pending")}</span>
+                      ${renderAuditMapProof(entry.geo)}
+                      <span>${escapeHtml(entry.reference || entry.source || "Field entry")}</span>
+                    </div>
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          </section>
+          <footer>Produced by Agrinexus Intelligence - Public-source and field-entry data, for management review only</footer>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function resetAuditDraft() {
+  stopAuditCamera();
+  state.auditDraftImage = null;
+  state.auditDraftImageName = "";
+  state.auditDraftGeo = null;
+  state.auditCameraError = "";
+}
+
+function auditGeoText(geo) {
+  if (!geo) return "Map location will attach after Take photo.";
+  return `Map location captured - accuracy ${formatNumber(geo.accuracy, { maximumFractionDigits: 0 })}m`;
+}
+
+function auditMapUrls(geo) {
+  const latitude = Number(geo?.latitude);
+  const longitude = Number(geo?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  const lat = latitude.toFixed(6);
+  const lon = longitude.toFixed(6);
+  return {
+    label: auditGeoText(geo),
+    link: `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}`,
+  };
+}
+
+function renderAuditMapProof(geo, compact = false) {
+  const urls = auditMapUrls(geo);
+  if (!urls) return `<div class="audit-map-proof empty">Map location pending</div>`;
+  return `
+    <div class="audit-map-proof${compact ? " compact" : ""}">
+      <span class="audit-map-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 21s7-5.2 7-12A7 7 0 0 0 5 9c0 6.8 7 12 7 12Z" /><circle cx="12" cy="9" r="2.4" /></svg>
+      </span>
+      <div>
+        <a href="${escapeHtml(urls.link)}" target="_blank" rel="noopener">Open map location</a>
+        <small>${escapeHtml(urls.label)}</small>
+      </div>
+    </div>
+  `;
+}
+
+function renderAuditGeoReadout(geo) {
+  if (!geo) return `<span class="audit-map-pending">Map location will attach after Take photo.</span>`;
+  return renderAuditMapProof(geo, true);
+}
+
+function updateAuditPhotoPreview(fileName, sourceType) {
+  const preview = qs(".audit-empty-photo, .audit-photo-preview");
+  const status = qs("#auditPhotoStatus");
+  if (preview) preview.outerHTML = `<img class="audit-photo-preview" src="${state.auditDraftImage}" alt="Audit evidence preview" />`;
+  if (status) status.textContent = `${fileName} ready to save${sourceType === "camera" ? " with GPS tagging in progress." : "."}`;
+}
+
+function captureAuditGeoInBackground() {
+  const status = qs("#auditGeoStatus");
+  const helper = qs("#auditGeoHelper");
+  if (!navigator.geolocation) {
+    if (status) status.textContent = "Geolocation is not available in this browser.";
+    if (helper) helper.textContent = "The photo can still be saved, but no GPS tag was captured.";
+    return;
+  }
+  if (status) status.textContent = "Capturing GPS in background...";
+  if (helper) helper.textContent = "Keep the browser open until the GPS tag appears.";
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      state.auditDraftGeo = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      };
+      if (status) status.innerHTML = renderAuditGeoReadout(state.auditDraftGeo);
+      if (helper) helper.textContent = "Map proof captured automatically from the photo workflow.";
+      const photoStatus = qs("#auditPhotoStatus");
+      if (photoStatus) photoStatus.textContent = `${state.auditDraftImageName || "Photo"} ready to save with map proof.`;
+    },
+    (error) => {
+      if (status) status.textContent = error.message || "GPS permission was not granted.";
+      if (helper) helper.textContent = "The photo can still be saved, but GPS permission is needed for geotagging.";
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+  );
+}
+
+function stopAuditCamera() {
+  if (state.auditCameraStream) {
+    state.auditCameraStream.getTracks().forEach((track) => track.stop());
+  }
+  state.auditCameraStream = null;
+  state.auditCameraOpen = false;
+}
+
+async function startAuditCamera() {
+  state.auditCameraError = "";
+  if (!navigator.mediaDevices?.getUserMedia) {
+    qs("#auditCameraInput")?.click();
+    return;
+  }
+  state.auditCameraOpen = true;
+  await renderAudit();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false,
+    });
+    state.auditCameraStream = stream;
+    const video = qs("#auditCameraPreview");
+    if (video) {
+      video.srcObject = stream;
+      await video.play().catch(() => {});
+    }
+    const status = qs("#auditCameraStatus");
+    if (status) status.textContent = "Camera ready. Frame the evidence and capture.";
+  } catch (error) {
+    state.auditCameraError = error.message || "Camera permission was not granted.";
+    stopAuditCamera();
+    await renderAudit();
+  }
+}
+
+function captureAuditCameraPhoto() {
+  const video = qs("#auditCameraPreview");
+  const status = qs("#auditCameraStatus");
+  if (!video || !video.videoWidth || !video.videoHeight) {
+    if (status) status.textContent = "Camera is still starting. Try again in a moment.";
+    return;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    if (status) status.textContent = "Camera capture could not be prepared in this browser.";
+    return;
+  }
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  state.auditDraftImage = canvas.toDataURL("image/jpeg", 0.86);
+  state.auditDraftImageName = `field-photo-${new Date().toISOString().replace(/[:.]/g, "-")}.jpg`;
+  stopAuditCamera();
+  renderAudit();
+  setTimeout(() => captureAuditGeoInBackground(), 0);
+}
+
+async function downloadAuditPdf() {
+  const button = qs("#downloadAuditReport");
+  const previousLabel = button?.getAttribute("aria-label") || "Download audit report PDF";
+  if (button) {
+    button.setAttribute("aria-label", "Generating audit report PDF");
+    button.setAttribute("disabled", "disabled");
+  }
+  try {
+    const response = await fetch(`/api/projects/${PROJECT_ID}/audit-pdf?download=1`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        auditYear: state.auditYear,
+        reportSettings: auditReportSettings(),
+        brandingLogoUrl: brandLogoUrl(),
+      }),
+    });
+    if (!response.ok) throw new Error(`PDF generation failed: ${response.status}`);
+    const blob = await response.blob();
+    const issueDate = auditReportSettings().auditIssueDate || new Date().toISOString().slice(0, 10);
+    const fallbackName = `oban-audit-report-${issueDate}.pdf`;
+    downloadBlob(filenameFromDisposition(response.headers.get("Content-Disposition"), fallbackName), blob);
+  } catch (error) {
+    window.alert(error.message || "Audit PDF could not be generated.");
+  } finally {
+    if (button) {
+      button.setAttribute("aria-label", previousLabel);
+      button.removeAttribute("disabled");
+    }
+  }
+}
+
+async function handleAuditPhotoSelection(event, sourceType) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const status = qs("#auditPhotoStatus");
+  if (!/^image\//i.test(file.type)) {
+    if (status) status.textContent = "Please select an image file.";
+    return;
+  }
+  state.auditDraftImageName = file.name || (sourceType === "camera" ? "Field photo" : "Uploaded image");
+  state.auditDraftImage = await readFileAsDataUrl(file);
+  updateAuditPhotoPreview(state.auditDraftImageName, sourceType);
+  if (sourceType === "camera") captureAuditGeoInBackground();
+}
+
+function bindAuditEvents() {
+  qsa("#auditTabs button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.auditPanel === state.selectedAuditPanel);
+    button.addEventListener("click", () => {
+      state.selectedAuditPanel = button.dataset.auditPanel || "entry";
+      renderAudit();
+    });
+  });
+
+  bindEvent("#auditUploadInput", "change", (event) => handleAuditPhotoSelection(event, "upload"));
+  bindEvent("#auditCameraInput", "change", (event) => handleAuditPhotoSelection(event, "camera"));
+  bindClick("#startAuditCamera", startAuditCamera);
+  bindClick("#captureAuditCamera", captureAuditCameraPhoto);
+  bindClick("#cancelAuditCamera", () => {
+    stopAuditCamera();
+    renderAudit();
+  });
+  bindEvent("#auditEntryYear", "change", (event) => {
+    state.auditYear = event.target.value || "2025";
+    state.auditPage = 1;
+    renderAudit();
+  });
+  bindEvent("#auditReportYear", "change", (event) => {
+    state.auditYear = event.target.value || "2025";
+    state.auditPage = 1;
+    renderAudit();
+  });
+
+  bindClick("#auditPrevPage", () => {
+    state.auditPage = Math.max(1, state.auditPage - 1);
+    renderAudit();
+  });
+  bindClick("#auditNextPage", () => {
+    state.auditPage += 1;
+    renderAudit();
+  });
+  bindEvent("#auditPageSize", "change", (event) => {
+    state.auditPageSize = Number(event.target.value) || 5;
+    state.auditPage = 1;
+    renderAudit();
+  });
+  bindEvent("#auditSearch", "input", (event) => {
+    state.auditSearch = event.target.value;
+    state.auditPage = 1;
+    clearTimeout(state.auditSearchTimer);
+    state.auditSearchTimer = setTimeout(() => renderAudit(), 250);
+  });
+
+  bindClick("#saveAuditEntry", async () => {
+    const finding = qs("#auditFinding")?.value.trim();
+    const status = qs("#auditSaveStatus");
+    if (!finding) {
+      if (status) status.textContent = "Observation / Finding is required before saving.";
+      return;
+    }
+    const entry = {
+      id: `audit_${Date.now()}`,
+      auditYear: qs("#auditEntryYear")?.value || state.auditYear,
+      department: qs("#auditDepartment")?.value || "Unassigned",
+      area: qs("#auditArea")?.value || "SOP compliance",
+      priority: qs("#auditPriority")?.value || "High",
+      status: qs("#auditStatus")?.value || "Open",
+      location: qs("#auditLocation")?.value.trim() || "",
+      owner: qs("#auditOwner")?.value.trim() || "",
+      dueDate: qs("#auditDueDate")?.value || "",
+      reference: qs("#auditReference")?.value.trim() || "",
+      finding,
+      impact: qs("#auditImpact")?.value.trim() || "Impact pending review.",
+      recommendation: qs("#auditRecommendation")?.value.trim() || "Corrective action pending assignment.",
+      geo: state.auditDraftGeo,
+      photoDataUrl: state.auditDraftImage,
+      photoName: state.auditDraftImageName,
+      source: "Field entry",
+      capturedAt: new Date().toISOString(),
+    };
+    try {
+      if (status) status.textContent = "Saving finding...";
+      const result = await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
+      });
+      saveAuditEntries([result.entry || entry, ...auditEntries()]);
+      state.auditPage = 1;
+      resetAuditDraft();
+      if (status) status.textContent = "Finding saved.";
+      renderAudit();
+    } catch (error) {
+      if (status) status.textContent = error.message || "Finding could not be saved.";
+    }
+  });
+
+  bindClick("#clearAuditDraft", () => {
+    resetAuditDraft();
+    renderAudit();
+  });
+
+  bindClick("#openAuditReport", () => {
+    state.selectedAuditPanel = "report";
+    renderAudit();
+  });
+
+  bindClick("#printAuditReport", () => window.print());
+  bindClick("#downloadAuditReport", downloadAuditPdf);
+}
+
+async function renderAudit() {
+  const workspace = qs("#auditWorkspace");
+  if (!workspace) return;
+  if (!canAccessAudit()) {
+    workspace.innerHTML = `
+      <article class="panel empty-state">
+        <strong>Audit is available to admin users only.</strong>
+        <span>Sign in as admin to use field audit data entry and reporting.</span>
+      </article>
+    `;
+    return;
+  }
+  workspace.innerHTML = `
+    <article class="panel empty-state">
+      <strong>Loading Audit data</strong>
+      <span>Fetching seeded findings and field entries from the backend.</span>
+    </article>
+  `;
+  const entries = await loadAuditEntries();
+  workspace.innerHTML = state.selectedAuditPanel === "report" ? renderAuditReport(entries) : renderAuditEntry(entries);
+  bindAuditEvents();
+  applyBrandingLogo();
 }
 
 function renderChecks() {
@@ -2690,19 +3642,23 @@ function bindNavigation() {
 }
 
 async function init() {
-  const [analysis, projectData] = await Promise.all([
+  const [session, analysis, projectData] = await Promise.all([
+    requestJson("/api/session", { credentials: "same-origin" }),
     requestJson("./public/workbook-analysis.json"),
     requestJson(`/api/projects/${PROJECT_ID}`),
   ]);
+  state.currentSession = session;
   state.analysis = analysis;
   state.projectData = projectData;
   applyBrandingLogo();
+  applySessionUi();
   renderMetrics();
   loadLocalCpoOverviewPanel();
   renderDependencies();
   renderManagementConsole();
   renderInputs();
   renderReports();
+  if (canAccessAudit()) renderAudit();
   renderFundingChart();
   renderChecks();
   renderMarketTicker();

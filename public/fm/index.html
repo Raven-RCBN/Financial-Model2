@@ -6,7 +6,7 @@
     <title>Plantation Financial Model</title>
     <link rel="icon" type="image/png" sizes="32x32" href="./public/agrinexus-favicon-32.png?v=6" />
     <link rel="apple-touch-icon" sizes="180x180" href="./public/apple-touch-icon.png?v=6" />
-    <link rel="stylesheet" href="./styles.css?v=24" />
+    <link rel="stylesheet" href="./styles.css?v=25" />
   </head>
   <body>
     <div class="app-shell">
@@ -28,7 +28,7 @@
           </label>
           <label>
             User
-            <input value="admin" />
+            <input id="sessionUser" value="" readonly />
           </label>
           <label>
             Tenant
@@ -56,6 +56,7 @@
           <button class="module" data-view="management"><span class="mini-icon">mc</span> Management Console</button>
           <button class="module" data-view="inputs"><span class="mini-icon">in</span> Input Capture</button>
           <button class="module" data-view="dashboards"><span class="mini-icon">rp</span> Reports</button>
+          <button class="module" data-view="audit" data-admin-only="true" hidden><span class="mini-icon">au</span> Audit</button>
           <div class="sidebar-card">
             <span>Workbook Source</span>
             <strong>OPSL Aug26 FINAL</strong>
@@ -198,6 +199,38 @@
                         <label class="field management-setting-row">
                           <span>Start year</span>
                           <input id="managementStartYear" type="number" min="1900" max="2200" step="1" />
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Audit report title</span>
+                          <input id="managementAuditReportTitle" />
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Audit site / client</span>
+                          <input id="managementAuditClientName" />
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Audit location</span>
+                          <input id="managementAuditLocation" />
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Prepared by</span>
+                          <input id="managementAuditPreparedBy" />
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Audit period start</span>
+                          <input id="managementAuditPeriodStart" type="date" />
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Audit period end</span>
+                          <input id="managementAuditPeriodEnd" type="date" />
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Date of issue</span>
+                          <input id="managementAuditIssueDate" type="date" />
+                        </label>
+                        <label class="field management-setting-row">
+                          <span>Confidentiality label</span>
+                          <input id="managementAuditConfidentiality" />
                         </label>
                       </div>
                       <footer class="management-footer">
@@ -479,6 +512,21 @@
             </div>
           </section>
 
+          <section class="view" id="audit">
+            <div class="page-head compact audit-head">
+              <div>
+                <span class="eyebrow">Audit Module</span>
+                <h2>Field audit capture and report</h2>
+                <p>Mobile-ready audit data entry with evidence capture, GPS tagging, action owners, and an OBAN-style report preview.</p>
+              </div>
+              <div class="audit-tabs" id="auditTabs" aria-label="Audit sections">
+                <button class="active" data-audit-panel="entry">Data Entry</button>
+                <button data-audit-panel="report">Report</button>
+              </div>
+            </div>
+            <div id="auditWorkspace"></div>
+          </section>
+
           <section class="view" id="checks">
             <div class="page-head compact">
               <div>
@@ -506,6 +554,6 @@
         </section>
       </main>
     </div>
-    <script src="./app.js?v=24"></script>
+    <script src="./app.js?v=25"></script>
   </body>
 </html>

@@ -16,6 +16,34 @@ npm run dev
 npm run build
 ```
 
+## FM2 Local Development
+
+The hosted FM2 app is served by `server.mjs` for local smoke testing:
+
+```bash
+PYTHON=/path/to/python3 node server.mjs
+```
+
+Local users:
+
+- `finance` / `Finance@123`: financial model only.
+- `admin` / `Admin@123`: financial model plus Audit data entry and Audit report.
+
+Audit code is kept in `audit/`:
+
+- `audit/audit-store.mjs`: 2025 seed data, MongoDB persistence, and local JSON fallback.
+- `audit/render_audit_pdf.py`: OBAN-style PDF report renderer.
+- `audit/evidence/`: extracted seed evidence images from the 2025 and 2024 audit PDFs.
+
+Set `FM2_MONGODB_URI` to use MongoDB for Audit entries. Optional `FM2_MONGODB_DB`
+defaults to `financial_model2`. Without a MongoDB URI, the same Audit API uses
+`data/audit-entries.json` so mobile and report flows can still be smoke-tested
+locally.
+
+The Audit report screen separates seeded 2025 and 2024 data with a report-year
+selector. PDF generation uses the selected year and downloads a year-specific
+OBAN-style report.
+
 This starter does not use `wrangler.jsonc`.
 
 ## Included Shape
