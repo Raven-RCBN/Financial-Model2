@@ -22,6 +22,7 @@ RIGHT = 0.65 * inch
 TOP = PAGE_HEIGHT - 0.95 * inch
 BOTTOM = 0.62 * inch
 CONTENT_WIDTH = PAGE_WIDTH - LEFT - RIGHT
+APP_ROOT = Path(__file__).resolve().parents[1]
 
 BLUE = colors.HexColor("#24476c")
 INK = colors.HexColor("#0a2138")
@@ -146,7 +147,7 @@ def app_path(db_path: Path, value):
     clean = text(value).split("?", 1)[0]
     if clean.startswith("/"):
         clean = clean.lstrip("/")
-    return db_path.parent.parent / clean
+    return APP_ROOT / clean
 
 
 def logo_path(db_path: Path, project, payload):
@@ -157,7 +158,7 @@ def logo_path(db_path: Path, project, payload):
 
 
 def cover_image_path(db_path: Path):
-    candidate = db_path.parent.parent / "audit/evidence/oban-cover-source-1-27.jpg"
+    candidate = APP_ROOT / "audit/evidence/oban-cover-source-1-27.jpg"
     return candidate if candidate.exists() else None
 
 
