@@ -1107,6 +1107,18 @@ function renderAuditPdfReport(projectId, payload) {
   return result.stdout;
 }
 
+async function readSeededAuditSourcePdf(auditYear) {
+  const safeYear = String(auditYear || "").replace(/[^0-9]/g, "");
+  if (!safeYear) return null;
+  const sourcePath = path.join(__dirname, "audit", "source-reports", `oban-audit-report-${safeYear}.pdf`);
+  try {
+    return await fs.readFile(sourcePath);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 function cpoReportDateSlug(report) {
   const value = `${report?.refreshedAt || ""} ${report?.sourceUpdatedAt || ""} ${report?.cacheUpdatedAt || ""}`;
   const iso = value.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
@@ -1595,20 +1607,27 @@ async function api(req, res, url) {
     if (!isAuditAdmin(req)) return forbidden(req, res, "Audit access requires the admin user.");
     const patch = await bodyJson(req);
     const auditYear = String(patch.auditYear || url.searchParams.get("auditYear") || "");
-    const entries = Array.isArray(patch.entries) && patch.entries.length ? patch.entries : await allAuditEntries(dbPath, projectId, auditYear);
     const baseReportSettings = auditReportDefaultsByYear[auditYear] || auditReportDefaults;
     const reportSettings = {
       ...baseReportSettings,
       ...(patch.reportSettings && typeof patch.reportSettings === "object" ? patch.reportSettings : {}),
     };
+    const hasCustomEntries = Array.isArray(patch.entries) && patch.entries.length > 0;
+    const seededSourcePdf = hasCustomEntries ? null : await readSeededAuditSourcePdf(auditYear);
+    const disposition = url.searchParams.get("download") === "0" ? "inline" : "attachment";
+    const yearSegment = auditYear ? `${auditYear}-` : "";
+    res.setHeader("Content-Disposition", `${disposition}; filename="oban-audit-report-${yearSegment}${auditReportDateSlug(reportSettings)}.pdf"`);
+    if (seededSourcePdf) {
+      return send(req, res, 200, seededSourcePdf, "application/pdf", {
+        cacheControl: "no-store",
+      });
+    }
+    const entries = hasCustomEntries ? patch.entries : await allAuditEntries(dbPath, projectId, auditYear);
     const pdf = renderAuditPdfReport(projectId, {
       entries,
       reportSettings,
       brandingLogoUrl: patch.brandingLogoUrl,
     });
-    const disposition = url.searchParams.get("download") === "0" ? "inline" : "attachment";
-    const yearSegment = auditYear ? `${auditYear}-` : "";
-    res.setHeader("Content-Disposition", `${disposition}; filename="oban-audit-report-${yearSegment}${auditReportDateSlug(reportSettings)}.pdf"`);
     return send(req, res, 200, pdf, "application/pdf", {
       cacheControl: "no-store",
     });
