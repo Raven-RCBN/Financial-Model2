@@ -182,8 +182,8 @@ function hasValidSession(req) {
   return Boolean(currentSession(req));
 }
 
-function isAuditAdmin(req) {
-  return currentSession(req)?.role === "admin";
+function canAccessAudit(req) {
+  return hasValidSession(req);
 }
 
 function forbidden(req, res, message = "Forbidden") {
@@ -1141,6 +1141,27 @@ function auditReportDateSlug(settings = {}) {
   return iso ? `${iso[1]}-${iso[2]}-${iso[3]}` : new Date().toISOString().slice(0, 10);
 }
 
+function cleanAuditSetupList(values) {
+  const seen = new Set();
+  return (Array.isArray(values) ? values : [])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function cleanAuditSetup(setup = {}) {
+  return {
+    years: cleanAuditSetupList(setup.years).filter((year) => /^\d{4}$/.test(year)).sort((a, b) => Number(b) - Number(a)),
+    departments: cleanAuditSetupList(setup.departments),
+    areas: cleanAuditSetupList(setup.areas),
+  };
+}
+
 const MARKET_TICKER_TTL_MS = 5 * 60 * 1000;
 let marketTickerCache = null;
 
@@ -1564,12 +1585,12 @@ async function api(req, res, url) {
     return send(req, res, 200, pageItems(records, url, 20, 100));
   }
   if (child === "audit-seed") {
-    if (!isAuditAdmin(req)) return forbidden(req, res, "Audit access requires the admin user.");
+    if (!canAccessAudit(req)) return forbidden(req, res, "Audit access requires a signed-in user.");
     if (req.method !== "POST") return notFound(req, res);
     return send(req, res, 200, await seedAuditEntries(dbPath, projectId, url.searchParams.get("auditYear") || ""), "application/json; charset=utf-8", { cacheControl: "no-store" });
   }
   if (child === "audit-entries") {
-    if (!isAuditAdmin(req)) return forbidden(req, res, "Audit access requires the admin user.");
+    if (!canAccessAudit(req)) return forbidden(req, res, "Audit access requires a signed-in user.");
     if (req.method === "GET") {
       return send(req, res, 200, await listAuditEntries(dbPath, projectId, {
         page: url.searchParams.get("page"),
@@ -1604,7 +1625,7 @@ async function api(req, res, url) {
     });
   }
   if (req.method === "POST" && child === "audit-pdf") {
-    if (!isAuditAdmin(req)) return forbidden(req, res, "Audit access requires the admin user.");
+    if (!canAccessAudit(req)) return forbidden(req, res, "Audit access requires a signed-in user.");
     const patch = await bodyJson(req);
     const auditYear = String(patch.auditYear || url.searchParams.get("auditYear") || "");
     const baseReportSettings = auditReportDefaultsByYear[auditYear] || auditReportDefaults;
@@ -1696,6 +1717,9 @@ async function api(req, res, url) {
           projectRecord.settings.auditReport[key] = patch.auditReport[key].trim();
         }
       }
+    }
+    if (patch.auditSetup && typeof patch.auditSetup === "object") {
+      projectRecord.settings.auditSetup = cleanAuditSetup(patch.auditSetup);
     }
 
     await writeDb(db);

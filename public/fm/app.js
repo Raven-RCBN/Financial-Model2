@@ -59,6 +59,7 @@ const PROJECT_ID = "project_opsl_15000ha_development";
 const HIDDEN_REPORT_SHEETS = new Set(["Fund Req Aug26", "Bank Account Details", "OPSL AUG BUD req"]);
 const DEFAULT_BRAND_LOGO = "./public/agrinexus-logo.jpeg?v=4";
 const AUDIT_STORAGE_KEY = "fm2.auditEntries.v1";
+const DEFAULT_AUDIT_YEARS = ["2025", "2024"];
 const AUDIT_DEPARTMENTS = [
   "Mill Department",
   "Plantation - Overall",
@@ -424,6 +425,7 @@ async function localRequestJson(path, options = {}) {
     payload.project.settings.reportingCurrency = body.reportingCurrency || payload.project.settings.reportingCurrency;
     payload.project.settings.startYear = Number(body.startYear || payload.project.settings.startYear || 2026);
     payload.project.settings.auditReport = { ...auditReportSettings(), ...(body.auditReport || {}) };
+    payload.project.settings.auditSetup = normalizeAuditSetup(body.auditSetup || payload.project.settings.auditSetup || {});
     saveLocalProjectPayload(payload);
     return cloneLocal(payload);
   }
@@ -586,6 +588,50 @@ function projectSettings() {
   };
 }
 
+function normalizeAuditList(values, fallback = []) {
+  const seen = new Set();
+  const source = Array.isArray(values) && values.some((value) => String(value || "").trim()) ? values : fallback;
+  return source
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value) => {
+      const key = value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function normalizeAuditYears(values) {
+  return normalizeAuditList(values, DEFAULT_AUDIT_YEARS)
+    .filter((year) => /^\d{4}$/.test(year))
+    .sort((a, b) => Number(b) - Number(a));
+}
+
+function normalizeAuditSetup(setup = {}) {
+  return {
+    years: normalizeAuditYears(setup.years),
+    departments: normalizeAuditList(setup.departments, AUDIT_DEPARTMENTS),
+    areas: normalizeAuditList(setup.areas, AUDIT_AREAS),
+  };
+}
+
+function auditSetupSettings() {
+  return normalizeAuditSetup(projectSettings().auditSetup || {});
+}
+
+function auditYears() {
+  return auditSetupSettings().years;
+}
+
+function auditDepartments() {
+  return auditSetupSettings().departments;
+}
+
+function auditAreas() {
+  return auditSetupSettings().areas;
+}
+
 function auditReportSettings(year = state.auditYear || "2025") {
   const base = AUDIT_REPORT_DEFAULTS_BY_YEAR[String(year)] || AUDIT_REPORT_DEFAULTS;
   const custom = projectSettings().auditReport || {};
@@ -600,7 +646,7 @@ function auditReportSettings(year = state.auditYear || "2025") {
 }
 
 function canAccessAudit() {
-  return state.currentSession?.role === "admin";
+  return Boolean(state.currentSession?.userId);
 }
 
 function applySessionUi() {
@@ -972,6 +1018,7 @@ function renderManagementConsole() {
     .map((currency) => `<option value="${currency}" ${currency === reportingCurrency() ? "selected" : ""}>${currency}</option>`)
     .join("");
   qs("#managementConsoleStatus").textContent = `${company.name || "Company"} · ${project.name || "Project"} · ${reportingCurrency()} · starts ${reportStartYear()}`;
+  renderManagementAuditSetup();
   applyBrandingLogo();
   const logoUpload = qs("#managementLogoUpload");
   if (logoUpload) logoUpload.onchange = previewBrandingLogoSelection;
@@ -1023,6 +1070,93 @@ function setManagementConsoleTab(tab) {
   qsa("[data-management-panel]").forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.managementPanel === selected);
   });
+}
+
+function auditSetupFromDom() {
+  return {
+    years: qsa("#managementAuditYearChips [data-audit-setup-value]").map((chip) => chip.dataset.auditSetupValue),
+    departments: qsa("#managementAuditDepartmentChips [data-audit-setup-value]").map((chip) => chip.dataset.auditSetupValue),
+    areas: qsa("#managementAuditAreaChips [data-audit-setup-value]").map((chip) => chip.dataset.auditSetupValue),
+  };
+}
+
+function setAuditSetup(setup) {
+  state.projectData.project.settings ||= {};
+  state.projectData.project.settings.auditSetup = normalizeAuditSetup(setup);
+}
+
+function renderAuditSetupChips(containerId, values, type) {
+  const target = qs(containerId);
+  if (!target) return;
+  target.innerHTML = values
+    .map((value) => `
+      <span class="audit-setup-chip">
+        <span data-audit-setup-value="${escapeHtml(value)}">${escapeHtml(value)}</span>
+        <button type="button" data-audit-setup-remove="${escapeHtml(type)}" data-audit-setup-item="${escapeHtml(value)}" aria-label="Remove ${escapeHtml(value)}">&times;</button>
+      </span>
+    `)
+    .join("");
+}
+
+function renderManagementAuditSetup() {
+  const setup = auditSetupSettings();
+  renderAuditSetupChips("#managementAuditYearChips", setup.years, "years");
+  renderAuditSetupChips("#managementAuditDepartmentChips", setup.departments, "departments");
+  renderAuditSetupChips("#managementAuditAreaChips", setup.areas, "areas");
+  qsa("[data-audit-setup-add]").forEach((button) => {
+    button.onclick = () => addAuditSetupValue(button.dataset.auditSetupAdd);
+  });
+  qsa("[data-audit-setup-remove]").forEach((button) => {
+    button.onclick = () => removeAuditSetupValue(button.dataset.auditSetupRemove, button.dataset.auditSetupItem);
+  });
+}
+
+function addAuditSetupValue(type) {
+  const inputMap = {
+    years: "#managementAuditYearInput",
+    departments: "#managementAuditDepartmentInput",
+    areas: "#managementAuditAreaInput",
+  };
+  const input = qs(inputMap[type]);
+  const status = qs("#managementConsoleStatus");
+  const value = String(input?.value || "").trim();
+  if (!value) {
+    if (status) status.textContent = "Enter a value before adding it to audit setup.";
+    return;
+  }
+  if (type === "years" && !/^\d{4}$/.test(value)) {
+    if (status) status.textContent = "Audit year must be a 4-digit year.";
+    return;
+  }
+  const setup = auditSetupSettings();
+  const next = {
+    ...setup,
+    [type]: normalizeAuditList([value, ...(setup[type] || [])], type === "years" ? DEFAULT_AUDIT_YEARS : []),
+  };
+  if (type === "years") next.years = normalizeAuditYears(next.years);
+  setAuditSetup(next);
+  if (input) input.value = "";
+  if (status) status.textContent = "Audit setup updated. Save to publish these master data changes.";
+  renderManagementAuditSetup();
+  renderAudit();
+}
+
+function removeAuditSetupValue(type, value) {
+  const setup = auditSetupSettings();
+  const fallback = {
+    years: DEFAULT_AUDIT_YEARS,
+    departments: AUDIT_DEPARTMENTS,
+    areas: AUDIT_AREAS,
+  }[type] || [];
+  const nextValues = (setup[type] || []).filter((item) => item !== value);
+  setAuditSetup({ ...setup, [type]: nextValues.length ? nextValues : fallback });
+  const status = qs("#managementConsoleStatus");
+  if (status) status.textContent = "Audit setup updated. Save to publish these master data changes.";
+  if (type === "years" && !auditYears().includes(String(state.auditYear))) {
+    state.auditYear = auditYears()[0] || "2025";
+  }
+  renderManagementAuditSetup();
+  renderAudit();
 }
 
 function renderManagementGovernance() {
@@ -1339,6 +1473,7 @@ async function saveManagementConsole() {
         auditIssueDate: qs("#managementAuditIssueDate").value,
         auditConfidentiality: qs("#managementAuditConfidentiality").value.trim(),
       },
+      auditSetup: auditSetupFromDom(),
     }),
   });
   renderMetrics();
@@ -2786,16 +2921,16 @@ function renderAuditEntry(entries) {
           <label class="field">
             <span>Report year</span>
             <select id="auditEntryYear">
-              ${["2025", "2024"].map((year) => `<option value="${year}" ${year === String(state.auditYear) ? "selected" : ""}>${year}</option>`).join("")}
+              ${auditOptions(auditYears(), String(state.auditYear))}
             </select>
           </label>
           <label class="field">
             <span>Department</span>
-            <select id="auditDepartment">${auditOptions(AUDIT_DEPARTMENTS, "Mill Department")}</select>
+            <select id="auditDepartment">${auditOptions(auditDepartments(), auditDepartments()[0] || "Mill Department")}</select>
           </label>
           <label class="field">
             <span>Audit area</span>
-            <select id="auditArea">${auditOptions(AUDIT_AREAS, "SOP compliance")}</select>
+            <select id="auditArea">${auditOptions(auditAreas(), auditAreas()[0] || "SOP compliance")}</select>
           </label>
           <label class="field">
             <span>Priority</span>
@@ -2952,7 +3087,7 @@ function renderAuditReport(entries) {
           <label>
             <span>Report year</span>
             <select id="auditReportYear">
-              ${["2025", "2024"].map((year) => `<option value="${year}" ${year === String(state.auditYear) ? "selected" : ""}>${year}</option>`).join("")}
+              ${auditOptions(auditYears(), String(state.auditYear))}
             </select>
           </label>
           <label>

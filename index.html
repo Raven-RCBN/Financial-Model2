@@ -56,7 +56,7 @@
           <button class="module" data-view="management"><span class="mini-icon">mc</span> Management Console</button>
           <button class="module" data-view="inputs"><span class="mini-icon">in</span> Input Capture</button>
           <button class="module" data-view="dashboards"><span class="mini-icon">rp</span> Reports</button>
-          <button class="module" data-view="audit" data-admin-only="true" hidden><span class="mini-icon">au</span> Audit</button>
+          <button class="module" data-view="audit"><span class="mini-icon">au</span> Audit</button>
           <div class="sidebar-card">
             <span>Workbook Source</span>
             <strong>OPSL Aug26 FINAL</strong>
@@ -232,6 +232,44 @@
                           <span>Confidentiality label</span>
                           <input id="managementAuditConfidentiality" />
                         </label>
+                      </div>
+                      <div class="management-audit-setup" aria-label="Audit master data setup">
+                        <div class="management-subhead">
+                          <span class="eyebrow">Audit Setup</span>
+                          <h4>Master data for Audit menu</h4>
+                        </div>
+                        <div class="audit-setup-grid">
+                          <div class="audit-setup-card">
+                            <label class="field">
+                              <span>Add report year</span>
+                              <div class="audit-setup-add-row">
+                                <input id="managementAuditYearInput" inputmode="numeric" placeholder="2026" />
+                                <button class="secondary-button" type="button" data-audit-setup-add="years"><span class="mini-icon">+</span> Add</button>
+                              </div>
+                            </label>
+                            <div class="audit-setup-chips" id="managementAuditYearChips"></div>
+                          </div>
+                          <div class="audit-setup-card">
+                            <label class="field">
+                              <span>Add department</span>
+                              <div class="audit-setup-add-row">
+                                <input id="managementAuditDepartmentInput" placeholder="Workshop Department" />
+                                <button class="secondary-button" type="button" data-audit-setup-add="departments"><span class="mini-icon">+</span> Add</button>
+                              </div>
+                            </label>
+                            <div class="audit-setup-chips" id="managementAuditDepartmentChips"></div>
+                          </div>
+                          <div class="audit-setup-card">
+                            <label class="field">
+                              <span>Add audit area</span>
+                              <div class="audit-setup-add-row">
+                                <input id="managementAuditAreaInput" placeholder="Fuel control" />
+                                <button class="secondary-button" type="button" data-audit-setup-add="areas"><span class="mini-icon">+</span> Add</button>
+                              </div>
+                            </label>
+                            <div class="audit-setup-chips" id="managementAuditAreaChips"></div>
+                          </div>
+                        </div>
                       </div>
                       <footer class="management-footer">
                         <span id="managementConsoleStatus">Report headers and period years use these saved settings.</span>
