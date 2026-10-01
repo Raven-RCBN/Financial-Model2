@@ -1628,7 +1628,10 @@ async function api(req, res, url) {
     if (!canAccessAudit(req)) return forbidden(req, res, "Audit access requires a signed-in user.");
     const patch = await bodyJson(req);
     const auditYear = String(patch.auditYear || url.searchParams.get("auditYear") || "");
-    const baseReportSettings = auditReportDefaultsByYear[auditYear] || auditReportDefaults;
+    const baseReportSettings = auditReportDefaultsByYear[auditYear] || {
+      ...auditReportDefaults,
+      auditReportTitle: auditYear ? `${auditYear} Internal Audit Report` : auditReportDefaults.auditReportTitle,
+    };
     const reportSettings = {
       ...baseReportSettings,
       ...(patch.reportSettings && typeof patch.reportSettings === "object" ? patch.reportSettings : {}),

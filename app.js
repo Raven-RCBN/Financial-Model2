@@ -22,6 +22,7 @@ const state = {
   auditPage: 1,
   auditPageSize: 5,
   auditTotal: 0,
+  auditYearCounts: {},
   auditBackend: "",
   auditLoading: false,
   auditSearch: "",
@@ -59,7 +60,7 @@ const PROJECT_ID = "project_opsl_15000ha_development";
 const HIDDEN_REPORT_SHEETS = new Set(["Fund Req Aug26", "Bank Account Details", "OPSL AUG BUD req"]);
 const DEFAULT_BRAND_LOGO = "./public/agrinexus-logo.jpeg?v=4";
 const AUDIT_STORAGE_KEY = "fm2.auditEntries.v1";
-const DEFAULT_AUDIT_YEARS = ["2025", "2024"];
+const DEFAULT_AUDIT_YEARS = ["2030", "2029", "2028", "2027", "2026", "2025", "2024"];
 const AUDIT_DEPARTMENTS = [
   "Mill Department",
   "Plantation - Overall",
@@ -213,7 +214,8 @@ async function requestJson(path, options) {
 }
 
 function usesLocalFallback(path) {
-  return String(path || "").startsWith("/api/");
+  const host = window.location.hostname;
+  return String(path || "").startsWith("/api/") && (host === "127.0.0.1" || host === "localhost" || window.location.protocol === "file:");
 }
 
 function cloneLocal(value) {
@@ -373,9 +375,14 @@ async function localRequestJson(path, options = {}) {
     const auditYear = String(url.searchParams.get("auditYear") || state.auditYear || "");
     const filtered = current
       .filter((entry) => !auditYear || String(entry.auditYear || "2025") === auditYear)
-      .filter((entry) => !q || [entry.department, entry.location, entry.finding].some((value) => String(value || "").toLowerCase().includes(q)));
+      .filter((entry) => !q || [entry.entity, entry.companyName, entry.department, entry.location, entry.finding].some((value) => String(value || "").toLowerCase().includes(q)));
+    const yearCounts = current.reduce((counts, entry) => {
+      const year = String(entry.auditYear || "2025");
+      counts[year] = (counts[year] || 0) + 1;
+      return counts;
+    }, {});
     const start = (page - 1) * pageSize;
-    return { backend: "local", page, pageSize, total: filtered.length, items: filtered.slice(start, start + pageSize) };
+    return { backend: "local", page, pageSize, total: filtered.length, items: filtered.slice(start, start + pageSize), yearCounts };
   }
 
   if (child === "audit-seed") {
@@ -603,7 +610,8 @@ function normalizeAuditList(values, fallback = []) {
 }
 
 function normalizeAuditYears(values) {
-  return normalizeAuditList(values, DEFAULT_AUDIT_YEARS)
+  const configured = Array.isArray(values) ? values : [];
+  return normalizeAuditList([...configured, ...DEFAULT_AUDIT_YEARS], [])
     .filter((year) => /^\d{4}$/.test(year))
     .sort((a, b) => Number(b) - Number(a));
 }
@@ -633,11 +641,17 @@ function auditAreas() {
 }
 
 function auditReportSettings(year = state.auditYear || "2025") {
-  const base = AUDIT_REPORT_DEFAULTS_BY_YEAR[String(year)] || AUDIT_REPORT_DEFAULTS;
+  const yearKey = String(year);
+  const base = AUDIT_REPORT_DEFAULTS_BY_YEAR[yearKey] || AUDIT_REPORT_DEFAULTS;
   const custom = projectSettings().auditReport || {};
-  if (String(year) === "2025") return { ...base, ...custom };
+  if (yearKey === "2025") return { ...base, ...custom };
+  const fallbackTitle = AUDIT_REPORT_DEFAULTS_BY_YEAR[yearKey]?.auditReportTitle || `${yearKey} Internal Audit Report`;
+  const customTitle = custom.auditReportTitle && custom.auditReportTitle !== AUDIT_REPORT_DEFAULTS.auditReportTitle
+    ? custom.auditReportTitle
+    : fallbackTitle;
   return {
     ...base,
+    auditReportTitle: customTitle,
     auditClientName: custom.auditClientName || base.auditClientName,
     auditLocation: custom.auditLocation || base.auditLocation,
     auditPreparedBy: custom.auditPreparedBy || base.auditPreparedBy,
@@ -2831,6 +2845,7 @@ async function loadAuditEntries() {
     });
     state.auditEntries = Array.isArray(result.items) ? result.items : [];
     state.auditTotal = Number(result.total || state.auditEntries.length);
+    state.auditYearCounts = result.yearCounts && typeof result.yearCounts === "object" ? result.yearCounts : {};
     state.auditPage = Number(result.page || state.auditPage);
     state.auditPageSize = Number(result.pageSize || state.auditPageSize);
     state.auditBackend = result.backend || "";
@@ -2898,8 +2913,18 @@ function auditDepartmentRows(entries) {
   return Object.entries(groups).sort((a, b) => b[1].high - a[1].high || b[1].total - a[1].total || a[0].localeCompare(b[0]));
 }
 
-function auditOptions(options, selected) {
-  return options.map((option) => `<option ${option === selected ? "selected" : ""}>${escapeHtml(option)}</option>`).join("");
+function auditOptions(options, selected, counts = null) {
+  return options.map((option) => {
+    const total = counts ? Number(counts[option] || 0) : 0;
+    const selectedAttr = option === selected ? " selected" : "";
+    const dataAttr = counts ? ` data-has-report="${total > 0 ? "1" : "0"}"` : "";
+    const styleAttr = total > 0 ? ' style="background:#eaf8ef;color:#17643c;font-weight:800;"' : "";
+    return `<option${selectedAttr}${dataAttr}${styleAttr}>${escapeHtml(option)}</option>`;
+  }).join("");
+}
+
+function auditYearHasReport(year) {
+  return Number(state.auditYearCounts?.[String(year)] || 0) > 0;
 }
 
 function renderAuditEntry(entries) {
@@ -2920,9 +2945,13 @@ function renderAuditEntry(entries) {
         <div class="audit-form-grid">
           <label class="field">
             <span>Report year</span>
-            <select id="auditEntryYear">
-              ${auditOptions(auditYears(), String(state.auditYear))}
+            <select id="auditEntryYear" class="${auditYearHasReport(state.auditYear) ? "audit-year-has-report" : ""}">
+              ${auditOptions(auditYears(), String(state.auditYear), state.auditYearCounts)}
             </select>
+          </label>
+          <label class="field">
+            <span>Entity / company</span>
+            <input id="auditEntity" placeholder="Company or estate audited" />
           </label>
           <label class="field">
             <span>Department</span>
@@ -3086,8 +3115,8 @@ function renderAuditReport(entries) {
         <div class="audit-report-tools">
           <label>
             <span>Report year</span>
-            <select id="auditReportYear">
-              ${auditOptions(auditYears(), String(state.auditYear))}
+            <select id="auditReportYear" class="${auditYearHasReport(state.auditYear) ? "audit-year-has-report" : ""}">
+              ${auditOptions(auditYears(), String(state.auditYear), state.auditYearCounts)}
             </select>
           </label>
           <label>
@@ -3160,10 +3189,11 @@ function renderAuditReport(entries) {
                     <b class="risk ${auditPriorityClass(entry.priority)}">${escapeHtml(entry.priority)}</b>
                   </header>
                   <div class="audit-finding-body">
-                    <div><b>Observations / Findings</b><span>${escapeHtml(entry.finding)}</span></div>
-                    <div><b>Impact</b><span>${escapeHtml(entry.impact)}</span></div>
-                    <div><b>Recommendation</b><span>${escapeHtml(entry.recommendation)}</span></div>
+                    <div><b>Observations / Findings</b><span class="multiline-text">${escapeHtml(entry.finding)}</span></div>
+                    <div><b>Impact</b><span class="multiline-text">${escapeHtml(entry.impact)}</span></div>
+                    <div><b>Recommendation</b><span class="multiline-text">${escapeHtml(entry.recommendation)}</span></div>
                     <div class="audit-response-row">
+                      <span><b>Entity / Company</b>${escapeHtml(entry.entity || entry.companyName || state.projectData.company.name || "-")}</span>
                       <span><b>Owner</b>${escapeHtml(entry.owner || "-")}</span>
                       <span><b>Timeline</b>${auditDateLabel(entry.dueDate)}</span>
                       <span><b>Status</b><em class="risk ${auditStatusClass(entry.status)}">${escapeHtml(entry.status || "Open")}</em></span>
@@ -3433,6 +3463,7 @@ function bindAuditEvents() {
     const entry = {
       id: `audit_${Date.now()}`,
       auditYear: qs("#auditEntryYear")?.value || state.auditYear,
+      entity: qs("#auditEntity")?.value.trim() || state.projectData.company.name || "",
       department: qs("#auditDepartment")?.value || "Unassigned",
       area: qs("#auditArea")?.value || "SOP compliance",
       priority: qs("#auditPriority")?.value || "High",
@@ -3452,13 +3483,12 @@ function bindAuditEvents() {
     };
     try {
       if (status) status.textContent = "Saving finding...";
-      const result = await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`, {
+      await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`, {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(entry),
       });
-      saveAuditEntries([result.entry || entry, ...auditEntries()]);
       state.auditPage = 1;
       resetAuditDraft();
       if (status) status.textContent = "Finding saved.";

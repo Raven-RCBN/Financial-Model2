@@ -553,6 +553,7 @@ def draw_department_issue(c, settings, logo, page_number, entry, index, db_path)
         map_value = f'<link href="{html.escape(link)}"><font color="#005eb8">Open map location</font></link><br/><font size="8">Captured with approx {html.escape(accuracy)}m accuracy</font>'
     response = Table(
         [
+            ["Entity / Company", text(entry.get("entity") or entry.get("companyName") or "-"), "Department", text(entry.get("department") or "-"), ""],
             ["OBAN Management", "Department in-charge:", text(entry.get("owner") or "-"), "Timeline for completion:", date_label(entry.get("dueDate"))],
             ["Status", text(entry.get("status") or "Open"), "Reference", text(entry.get("reference") or entry.get("source") or "Field entry"), ""],
             ["Map proof", Paragraph(map_value, s["small"]), "Photo evidence", text(entry.get("photoName") or "Captured field image"), ""],

@@ -2918,6 +2918,21 @@ p {
   color: var(--blue-text);
 }
 
+.field select.audit-year-has-report,
+.audit-report-tools select.audit-year-has-report {
+  border-color: #8fd2a6;
+  color: #17643c;
+  background: #f0fbf4;
+  box-shadow: inset 0 0 0 1px rgba(47, 143, 83, 0.12);
+}
+
+.field select option[data-has-report="1"],
+.audit-report-tools select option[data-has-report="1"] {
+  color: #17643c;
+  background: #eaf8ef;
+  font-weight: 800;
+}
+
 .mini-icon,
 .icon-button span,
 .file-mark {
@@ -4087,10 +4102,14 @@ p {
   line-height: 1.45;
 }
 
+.audit-finding-body .multiline-text {
+  white-space: pre-line;
+}
+
 .audit-response-row,
 .audit-evidence-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 

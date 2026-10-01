@@ -430,6 +430,7 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
     id: String(entry.id || `audit_${randomUUID()}`),
     projectId: String(entry.projectId || projectId),
     auditYear: auditYearFromEntry(entry),
+    entity: String(entry.entity || entry.companyName || ""),
     department: String(entry.department || "Unassigned"),
     area: String(entry.area || "SOP compliance"),
     priority: String(entry.priority || "High"),
@@ -527,7 +528,7 @@ export async function seedAuditEntries(dbPath, projectId, auditYear = "") {
 }
 
 export async function listAuditEntries(dbPath, projectId, { page = 1, pageSize = 10, q = "", department = "", status = "", auditYear = "" } = {}) {
-  await seedAuditEntries(dbPath, projectId, auditYear);
+  await seedAuditEntries(dbPath, projectId, "");
   const normalizedPage = Math.max(1, Number(page) || 1);
   const normalizedPageSize = Math.min(5000, Math.max(1, Number(pageSize) || 10));
   const filters = {
@@ -541,9 +542,18 @@ export async function listAuditEntries(dbPath, projectId, { page = 1, pageSize =
   let backend = "json";
   if (collection) {
     backend = "mongodb";
+    const yearCounts = Object.fromEntries((await collection
+      .aggregate([
+        { $match: { projectId } },
+        { $group: { _id: "$auditYear", total: { $sum: 1 } } },
+      ])
+      .toArray())
+      .filter((row) => row._id)
+      .map((row) => [String(row._id), row.total]));
     const mongoFilters = { ...filters };
     if (q) {
       mongoFilters.$or = [
+        { entity: { $regex: q, $options: "i" } },
         { finding: { $regex: q, $options: "i" } },
         { department: { $regex: q, $options: "i" } },
         { location: { $regex: q, $options: "i" } },
@@ -556,20 +566,25 @@ export async function listAuditEntries(dbPath, projectId, { page = 1, pageSize =
       .skip((normalizedPage - 1) * normalizedPageSize)
       .limit(normalizedPageSize)
       .toArray();
-    return { backend, page: normalizedPage, pageSize: normalizedPageSize, total, items };
+    return { backend, page: normalizedPage, pageSize: normalizedPageSize, total, items, yearCounts };
   }
-  items = await readFallbackEntries(dbPath, projectId);
+  const allItems = await readFallbackEntries(dbPath, projectId);
+  const yearCounts = allItems.reduce((counts, entry) => {
+    if (entry.auditYear) counts[entry.auditYear] = (counts[entry.auditYear] || 0) + 1;
+    return counts;
+  }, {});
+  items = allItems;
   if (auditYear) items = items.filter((entry) => entry.auditYear === String(auditYear));
   if (department) items = items.filter((entry) => entry.department === department);
   if (status) items = items.filter((entry) => entry.status === status);
   if (q) {
     const needle = q.toLowerCase();
-    items = items.filter((entry) => [entry.finding, entry.department, entry.location].some((value) => String(value).toLowerCase().includes(needle)));
+    items = items.filter((entry) => [entry.entity, entry.companyName, entry.finding, entry.department, entry.location].some((value) => String(value).toLowerCase().includes(needle)));
   }
   items = items.sort((a, b) => String(b.capturedAt).localeCompare(String(a.capturedAt)) || a.id.localeCompare(b.id));
   const total = items.length;
   const start = (normalizedPage - 1) * normalizedPageSize;
-  return { backend, page: normalizedPage, pageSize: normalizedPageSize, total, items: items.slice(start, start + normalizedPageSize) };
+  return { backend, page: normalizedPage, pageSize: normalizedPageSize, total, items: items.slice(start, start + normalizedPageSize), yearCounts };
 }
 
 export async function allAuditEntries(dbPath, projectId, auditYear = "") {
