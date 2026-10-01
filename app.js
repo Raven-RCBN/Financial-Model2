@@ -2940,7 +2940,6 @@ function renderAuditEntry(entries) {
             <span class="eyebrow">Data Entry</span>
             <h3>Mobile field audit form</h3>
           </div>
-          <span class="status-pill">${state.auditBackend ? `${escapeHtml(state.auditBackend)} backend` : "Backend data entry"}</span>
         </header>
         <div class="audit-form-grid">
           <label class="field">
