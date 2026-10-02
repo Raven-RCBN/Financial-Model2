@@ -184,6 +184,15 @@ def photo_source(entry, db_path):
     return app_path(db_path, source)
 
 
+def observation_image_source(item, db_path):
+    source = item.get("dataUrl") or item.get("url")
+    if not source:
+        return None
+    if text(source).startswith("data:image/"):
+        return source
+    return app_path(db_path, source)
+
+
 def map_link(geo):
     try:
         latitude = float(geo.get("latitude"))
@@ -538,6 +547,42 @@ def draw_department_issue(c, settings, logo, page_number, entry, index, db_path)
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
     ]))
     y = draw_table(c, issue_body, LEFT + 0.08 * inch, y)
+
+    observation_images = [
+        item for item in (entry.get("observationImages") or [])
+        if isinstance(item, dict) and observation_image_source(item, db_path)
+    ][:6]
+    if observation_images:
+        if y < 2.4 * inch:
+            c.showPage()
+            page_number += 1
+            draw_header_footer(c, settings, logo, page_number)
+            y = TOP - 0.15 * inch
+        c.setFillColor(DARK_BLUE)
+        c.setFont("Helvetica-Bold", 8.5)
+        c.drawString(LEFT + 0.08 * inch, y - 0.18 * inch, "Observation images")
+        y -= 0.32 * inch
+        image_w = (CONTENT_WIDTH - 0.42 * inch) / 2
+        image_h = 1.25 * inch
+        caption_h = 0.42 * inch
+        gap = 0.18 * inch
+        for row_start in range(0, len(observation_images), 2):
+            if y < BOTTOM + image_h + caption_h + 0.15 * inch:
+                c.showPage()
+                page_number += 1
+                draw_header_footer(c, settings, logo, page_number)
+                y = TOP - 0.15 * inch
+            for column, item in enumerate(observation_images[row_start:row_start + 2]):
+                x = LEFT + 0.08 * inch + column * (image_w + 0.22 * inch)
+                frame_y = y - image_h
+                c.setStrokeColor(GRID)
+                c.setLineWidth(0.5)
+                c.rect(x, frame_y, image_w, image_h, stroke=1, fill=0)
+                draw_image_fit(c, observation_image_source(item, db_path), x + 0.05 * inch, frame_y + 0.05 * inch, image_w - 0.1 * inch, image_h - 0.1 * inch)
+                caption = Paragraph(clean_text(item.get("description") or item.get("name") or "Observation image"), s["small"])
+                caption.wrapOn(c, image_w, caption_h)
+                caption.drawOn(c, x, frame_y - caption_h + 0.03 * inch)
+            y -= image_h + caption_h + gap
 
     if y < 2.45 * inch:
         c.showPage()

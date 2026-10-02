@@ -426,6 +426,18 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
     longitude: Number(entry.geo.longitude),
     accuracy: Number(entry.geo.accuracy || 0),
   } : null;
+  const observationImages = Array.isArray(entry.observationImages)
+    ? entry.observationImages
+      .filter((item) => item && typeof item === "object")
+      .map((item) => ({
+        dataUrl: typeof item.dataUrl === "string" && item.dataUrl.startsWith("data:image/") ? item.dataUrl : "",
+        url: typeof item.url === "string" && item.url.startsWith("/") ? item.url : "",
+        name: String(item.name || ""),
+        description: String(item.description || ""),
+      }))
+      .filter((item) => item.dataUrl || item.url)
+      .slice(0, 12)
+    : [];
   return {
     id: String(entry.id || `audit_${randomUUID()}`),
     projectId: String(entry.projectId || projectId),
@@ -440,6 +452,7 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
     dueDate: String(entry.dueDate || ""),
     reference: String(entry.reference || ""),
     finding: String(entry.finding || ""),
+    observationImages,
     impact: String(entry.impact || "Impact pending review."),
     recommendation: String(entry.recommendation || "Corrective action pending assignment."),
     geo: geo && Number.isFinite(geo.latitude) && Number.isFinite(geo.longitude) ? geo : null,

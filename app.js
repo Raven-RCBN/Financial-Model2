@@ -30,6 +30,8 @@ const state = {
   auditSearchTimer: null,
   auditDraftImage: null,
   auditDraftImageName: "",
+  auditObservationImages: [],
+  auditDraftFields: {},
   auditDraftGeo: null,
   auditCameraOpen: false,
   auditCameraStream: null,
@@ -542,6 +544,34 @@ function readFileAsDataUrl(file) {
     reader.onload = () => resolve(reader.result);
     reader.onerror = () => reject(new Error("Logo file could not be read."));
     reader.readAsDataURL(file);
+  });
+}
+
+function readImageFileAsCappedDataUrl(file, maxDimension = 1280, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        reject(new Error("Image could not be prepared."));
+        return;
+      }
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      readFileAsDataUrl(file).then(resolve).catch(reject);
+    };
+    image.src = objectUrl;
   });
 }
 
@@ -2880,6 +2910,21 @@ function auditStatusClass(status) {
   return "high";
 }
 
+function renderAuditObservationImages(images = []) {
+  const items = Array.isArray(images) ? images.filter((item) => item?.dataUrl || item?.url) : [];
+  if (!items.length) return "";
+  return `
+    <div class="audit-observation-report-images">
+      ${items.map((item, index) => `
+        <figure>
+          <img src="${escapeHtml(item.dataUrl || item.url)}" alt="Observation image ${index + 1}" />
+          <figcaption>${escapeHtml(item.description || item.name || `Observation image ${index + 1}`)}</figcaption>
+        </figure>
+      `).join("")}
+    </div>
+  `;
+}
+
 function auditDateLabel(value) {
   if (!value) return "-";
   const date = new Date(value);
@@ -2890,7 +2935,7 @@ function auditDateLabel(value) {
 function auditSummary(entries) {
   const departments = new Set(entries.map((entry) => entry.department).filter(Boolean));
   const highCount = entries.filter((entry) => ["critical", "high"].includes(String(entry.priority).toLowerCase())).length;
-  const evidenceCount = entries.filter((entry) => entry.photoDataUrl || entry.photoUrl || entry.photoName).length;
+  const evidenceCount = entries.filter((entry) => entry.photoDataUrl || entry.photoUrl || entry.photoName || entry.observationImages?.length).length;
   const openCount = entries.filter((entry) => String(entry.status || "").toLowerCase() !== "closed").length;
   return [
     ["Findings", entries.length.toLocaleString(), "Captured observations"],
@@ -2963,11 +3008,33 @@ function renderAuditEntityCard(entries) {
   `;
 }
 
+function captureAuditDraftFields() {
+  const valueFrom = (selector, fallback = "") => {
+    const element = qs(selector);
+    return element ? element.value : fallback;
+  };
+  state.auditDraftFields = {
+    department: valueFrom("#auditDepartment", state.auditDraftFields.department || ""),
+    area: valueFrom("#auditArea", state.auditDraftFields.area || ""),
+    priority: valueFrom("#auditPriority", state.auditDraftFields.priority || ""),
+    status: valueFrom("#auditStatus", state.auditDraftFields.status || ""),
+    location: valueFrom("#auditLocation", state.auditDraftFields.location || ""),
+    owner: valueFrom("#auditOwner", state.auditDraftFields.owner || ""),
+    dueDate: valueFrom("#auditDueDate", state.auditDraftFields.dueDate || ""),
+    reference: valueFrom("#auditReference", state.auditDraftFields.reference || ""),
+    finding: valueFrom("#auditFinding", state.auditDraftFields.finding || ""),
+    impact: valueFrom("#auditImpact", state.auditDraftFields.impact || ""),
+    recommendation: valueFrom("#auditRecommendation", state.auditDraftFields.recommendation || ""),
+  };
+}
+
 function renderAuditEntry(entries) {
   const today = new Date().toISOString().slice(0, 10);
   const latest = entries[0];
   const geo = state.auditDraftGeo;
   const image = state.auditDraftImage;
+  const observationImages = state.auditObservationImages || [];
+  const draft = state.auditDraftFields || {};
   return `
     <div class="audit-workspace">
       <article class="panel audit-form-panel">
@@ -2986,56 +3053,79 @@ function renderAuditEntry(entries) {
           </label>
           <label class="field">
             <span>Department</span>
-            <select id="auditDepartment">${auditOptions(auditDepartments(), auditDepartments()[0] || "Mill Department")}</select>
+            <select id="auditDepartment">${auditOptions(auditDepartments(), draft.department || auditDepartments()[0] || "Mill Department")}</select>
           </label>
           <label class="field">
             <span>Audit area</span>
-            <select id="auditArea">${auditOptions(auditAreas(), auditAreas()[0] || "SOP compliance")}</select>
+            <select id="auditArea">${auditOptions(auditAreas(), draft.area || auditAreas()[0] || "SOP compliance")}</select>
           </label>
           <label class="field">
             <span>Priority</span>
             <select id="auditPriority">
-              <option>High</option>
-              <option>Medium</option>
-              <option>Low</option>
-              <option>Critical</option>
+              ${["High", "Medium", "Low", "Critical"].map((option) => `<option ${option === (draft.priority || "High") ? "selected" : ""}>${option}</option>`).join("")}
             </select>
           </label>
           <label class="field">
             <span>Status</span>
             <select id="auditStatus">
-              <option>Open</option>
-              <option>In progress</option>
-              <option>Closed</option>
+              ${["Open", "In progress", "Closed"].map((option) => `<option ${option === (draft.status || "Open") ? "selected" : ""}>${option}</option>`).join("")}
             </select>
           </label>
           <label class="field">
             <span>Division, block, or location</span>
-            <input id="auditLocation" placeholder="Example: 2019 Block A6, mill line, main store" />
+            <input id="auditLocation" value="${escapeHtml(draft.location || "")}" placeholder="Example: 2019 Block A6, mill line, main store" />
           </label>
           <label class="field">
             <span>Responsible owner</span>
-            <input id="auditOwner" placeholder="Department HOD or action owner" />
+            <input id="auditOwner" value="${escapeHtml(draft.owner || "")}" placeholder="Department HOD or action owner" />
           </label>
           <label class="field">
             <span>Target closure date</span>
-            <input id="auditDueDate" type="date" value="${today}" />
+            <input id="auditDueDate" type="date" value="${escapeHtml(draft.dueDate || today)}" />
           </label>
           <label class="field">
             <span>Reference / asset tag</span>
-            <input id="auditReference" placeholder="Optional asset, invoice, block, or SOP reference" />
+            <input id="auditReference" value="${escapeHtml(draft.reference || "")}" placeholder="Optional asset, invoice, block, or SOP reference" />
           </label>
           <label class="field wide">
             <span>Observations / Findings</span>
-            <textarea id="auditFinding" rows="4" placeholder="Write the audit issue observed in the field."></textarea>
+            <textarea id="auditFinding" rows="4" placeholder="Write the audit issue observed in the field.">${escapeHtml(draft.finding || "")}</textarea>
+            <div class="audit-observation-dropzone ${observationImages.length ? "has-image" : ""}" id="auditObservationDropzone" tabindex="0" role="button" aria-label="Add images inside observation or finding">
+              <div>
+                <b>${observationImages.length ? "Add more observation images" : "Drop images here"}</b>
+                <span>Drag images from desktop into this observation, or click to choose.</span>
+              </div>
+            </div>
+            <input class="audit-file-input" id="auditObservationImageInput" type="file" accept="image/*" multiple />
+            ${observationImages.length ? `
+              <div class="audit-observation-images" id="auditObservationImages">
+                ${observationImages.map((item, index) => `
+                  <article class="audit-observation-image-card" data-observation-image-index="${index}">
+                    <img src="${escapeHtml(item.dataUrl)}" alt="Observation attachment ${index + 1}" />
+                    <label>
+                      <span>Description</span>
+                      <textarea class="audit-observation-image-description" data-observation-image-description="${index}" rows="2" placeholder="Describe what this image shows.">${escapeHtml(item.description || "")}</textarea>
+                    </label>
+                    <button type="button" class="audit-remove-observation-image" data-remove-observation-image="${index}">Remove</button>
+                  </article>
+                `).join("")}
+              </div>
+            ` : `
+              <div class="audit-observation-image-empty">
+                <div>
+                  <b>No observation image added</b>
+                  <span>Images added here will appear directly below the observation text.</span>
+                </div>
+              </div>
+            `}
           </label>
           <label class="field wide">
             <span>Impact</span>
-            <textarea id="auditImpact" rows="3" placeholder="Describe operational, financial, safety, compliance, or quality impact."></textarea>
+            <textarea id="auditImpact" rows="3" placeholder="Describe operational, financial, safety, compliance, or quality impact.">${escapeHtml(draft.impact || "")}</textarea>
           </label>
           <label class="field wide">
             <span>Recommendation / Corrective action</span>
-            <textarea id="auditRecommendation" rows="3" placeholder="State corrective action, prevention control, and evidence required for closure."></textarea>
+            <textarea id="auditRecommendation" rows="3" placeholder="State corrective action, prevention control, and evidence required for closure.">${escapeHtml(draft.recommendation || "")}</textarea>
           </label>
         </div>
         <div class="audit-evidence-grid">
@@ -3222,6 +3312,7 @@ function renderAuditReport(entries) {
                   </header>
                   <div class="audit-finding-body">
                     <div><b>Observations / Findings</b><span class="multiline-text">${escapeHtml(entry.finding)}</span></div>
+                    ${renderAuditObservationImages(entry.observationImages)}
                     <div><b>Impact</b><span class="multiline-text">${escapeHtml(entry.impact)}</span></div>
                     <div><b>Recommendation</b><span class="multiline-text">${escapeHtml(entry.recommendation)}</span></div>
                     <div class="audit-response-row">
@@ -3252,6 +3343,8 @@ function resetAuditDraft() {
   stopAuditCamera();
   state.auditDraftImage = null;
   state.auditDraftImageName = "";
+  state.auditObservationImages = [];
+  state.auditDraftFields = {};
   state.auditDraftGeo = null;
   state.auditCameraError = "";
 }
@@ -3292,6 +3385,36 @@ function renderAuditMapProof(geo, compact = false) {
 function renderAuditGeoReadout(geo) {
   if (!geo) return `<span class="audit-map-pending">Map location will attach after Take photo.</span>`;
   return renderAuditMapProof(geo, true);
+}
+
+async function addAuditObservationImages(files) {
+  captureAuditDraftFields();
+  const status = qs("#auditSaveStatus");
+  const imageFiles = Array.from(files || []).filter((file) => /^image\//i.test(file.type));
+  if (!imageFiles.length) {
+    if (status) status.textContent = "Please drop or choose image files for the observation.";
+    return;
+  }
+  const additions = await Promise.all(imageFiles.map(async (file) => ({
+    id: `obs_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    dataUrl: await readImageFileAsCappedDataUrl(file),
+    name: file.name || "Observation image",
+    description: "",
+  })));
+  state.auditObservationImages = [...(state.auditObservationImages || []), ...additions];
+  renderAudit();
+}
+
+function updateAuditObservationImageDescription(index, description) {
+  const item = state.auditObservationImages?.[index];
+  if (item) item.description = String(description || "");
+}
+
+function removeAuditObservationImage(index) {
+  captureAuditDraftFields();
+  state.auditObservationImages = (state.auditObservationImages || []).filter((_, itemIndex) => itemIndex !== index);
+  const input = qs("#auditObservationImageInput");
+  if (input) input.value = "";
 }
 
 function updateAuditPhotoPreview(fileName, sourceType) {
@@ -3340,6 +3463,7 @@ function stopAuditCamera() {
 }
 
 async function startAuditCamera() {
+  captureAuditDraftFields();
   state.auditCameraError = "";
   if (!navigator.mediaDevices?.getUserMedia) {
     qs("#auditCameraInput")?.click();
@@ -3368,6 +3492,7 @@ async function startAuditCamera() {
 }
 
 function captureAuditCameraPhoto() {
+  captureAuditDraftFields();
   const video = qs("#auditCameraPreview");
   const status = qs("#auditCameraStatus");
   if (!video || !video.videoWidth || !video.videoHeight) {
@@ -3449,6 +3574,40 @@ function bindAuditEvents() {
 
   bindEvent("#auditUploadInput", "change", (event) => handleAuditPhotoSelection(event, "upload"));
   bindEvent("#auditCameraInput", "change", (event) => handleAuditPhotoSelection(event, "camera"));
+  bindEvent("#auditObservationImageInput", "change", (event) => addAuditObservationImages(event.target.files));
+  const observationDropzone = qs("#auditObservationDropzone");
+  if (observationDropzone) {
+    observationDropzone.addEventListener("click", () => qs("#auditObservationImageInput")?.click());
+    observationDropzone.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        qs("#auditObservationImageInput")?.click();
+      }
+    });
+    ["dragenter", "dragover"].forEach((eventName) => {
+      observationDropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        observationDropzone.classList.add("drag-over");
+      });
+    });
+    ["dragleave", "drop"].forEach((eventName) => {
+      observationDropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        observationDropzone.classList.remove("drag-over");
+      });
+    });
+    observationDropzone.addEventListener("drop", (event) => addAuditObservationImages(event.dataTransfer?.files));
+  }
+  qsa("[data-observation-image-description]").forEach((field) => {
+    field.addEventListener("input", () => updateAuditObservationImageDescription(Number(field.dataset.observationImageDescription), field.value));
+  });
+  qsa("[data-remove-observation-image]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeAuditObservationImage(Number(button.dataset.removeObservationImage));
+      renderAudit();
+    });
+  });
   bindClick("#startAuditCamera", startAuditCamera);
   bindClick("#captureAuditCamera", captureAuditCameraPhoto);
   bindClick("#cancelAuditCamera", () => {
@@ -3508,6 +3667,11 @@ function bindAuditEvents() {
       dueDate: qs("#auditDueDate")?.value || "",
       reference: qs("#auditReference")?.value.trim() || "",
       finding,
+      observationImages: (state.auditObservationImages || []).map((item) => ({
+        dataUrl: item.dataUrl,
+        name: item.name,
+        description: item.description || "",
+      })),
       impact: qs("#auditImpact")?.value.trim() || "Impact pending review.",
       recommendation: qs("#auditRecommendation")?.value.trim() || "Corrective action pending assignment.",
       geo: state.auditDraftGeo,
