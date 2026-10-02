@@ -3028,6 +3028,24 @@ function captureAuditDraftFields() {
   };
 }
 
+function renderAuditObservationImageCards(images = []) {
+  if (!images.length) return "";
+  return `
+    <div class="audit-observation-images" id="auditObservationImages">
+      ${images.map((item, index) => `
+        <article class="audit-observation-image-card" data-observation-image-index="${index}">
+          <img src="${escapeHtml(item.dataUrl)}" alt="Observation attachment ${index + 1}" />
+          <label>
+            <span>Description</span>
+            <textarea class="audit-observation-image-description" data-observation-image-description="${index}" rows="2" placeholder="Describe what this image shows.">${escapeHtml(item.description || "")}</textarea>
+          </label>
+          <button type="button" class="audit-remove-observation-image" data-remove-observation-image="${index}">Remove</button>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderAuditEntry(entries) {
   const today = new Date().toISOString().slice(0, 10);
   const latest = entries[0];
@@ -3098,20 +3116,7 @@ function renderAuditEntry(entries) {
                 </div>
               </div>
               <input class="audit-file-input" id="auditObservationImageInput" type="file" accept="image/*" multiple />
-              ${observationImages.length ? `
-                <div class="audit-observation-images" id="auditObservationImages">
-                  ${observationImages.map((item, index) => `
-                    <article class="audit-observation-image-card" data-observation-image-index="${index}">
-                      <img src="${escapeHtml(item.dataUrl)}" alt="Observation attachment ${index + 1}" />
-                      <label>
-                        <span>Description</span>
-                        <textarea class="audit-observation-image-description" data-observation-image-description="${index}" rows="2" placeholder="Describe what this image shows.">${escapeHtml(item.description || "")}</textarea>
-                      </label>
-                      <button type="button" class="audit-remove-observation-image" data-remove-observation-image="${index}">Remove</button>
-                    </article>
-                  `).join("")}
-                </div>
-              ` : ""}
+              ${renderAuditObservationImageCards(observationImages)}
             </div>
           </label>
           <label class="field wide">
@@ -3382,6 +3387,44 @@ function renderAuditGeoReadout(geo) {
   return renderAuditMapProof(geo, true);
 }
 
+function updateAuditObservationDropzoneLabel() {
+  const observationImages = state.auditObservationImages || [];
+  const dropzone = qs("#auditObservationDropzone");
+  if (!dropzone) return;
+  dropzone.classList.toggle("has-image", observationImages.length > 0);
+  const label = dropzone.querySelector("b");
+  if (label) label.textContent = observationImages.length ? "Add more observation images" : "Drop images here";
+}
+
+function bindAuditObservationImageControls() {
+  qsa("[data-observation-image-description]").forEach((field) => {
+    field.addEventListener("input", () => updateAuditObservationImageDescription(Number(field.dataset.observationImageDescription), field.value));
+  });
+  qsa("[data-remove-observation-image]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeAuditObservationImage(Number(button.dataset.removeObservationImage));
+      refreshAuditObservationImageSection();
+    });
+  });
+}
+
+function refreshAuditObservationImageSection() {
+  const existing = qs("#auditObservationImages");
+  const input = qs("#auditObservationImageInput");
+  const html = renderAuditObservationImageCards(state.auditObservationImages || []);
+  if (!html) {
+    if (existing) existing.remove();
+  } else if (existing) {
+    existing.outerHTML = html;
+  } else {
+    input?.insertAdjacentHTML("afterend", html);
+  }
+  updateAuditObservationDropzoneLabel();
+  bindAuditObservationImageControls();
+  if (input) input.value = "";
+}
+
 async function addAuditObservationImages(files) {
   captureAuditDraftFields();
   const status = qs("#auditSaveStatus");
@@ -3390,14 +3433,16 @@ async function addAuditObservationImages(files) {
     if (status) status.textContent = "Please drop or choose image files for the observation.";
     return;
   }
+  if (status) status.textContent = "Preparing observation image...";
   const additions = await Promise.all(imageFiles.map(async (file) => ({
     id: `obs_${Date.now()}_${Math.random().toString(16).slice(2)}`,
-    dataUrl: await readImageFileAsCappedDataUrl(file),
+    dataUrl: await readImageFileAsCappedDataUrl(file, 960, 0.78),
     name: file.name || "Observation image",
     description: "",
   })));
   state.auditObservationImages = [...(state.auditObservationImages || []), ...additions];
-  renderAudit();
+  refreshAuditObservationImageSection();
+  if (status) status.textContent = `${additions.length} observation image${additions.length === 1 ? "" : "s"} added.`;
 }
 
 function updateAuditObservationImageDescription(index, description) {
@@ -3408,8 +3453,6 @@ function updateAuditObservationImageDescription(index, description) {
 function removeAuditObservationImage(index) {
   captureAuditDraftFields();
   state.auditObservationImages = (state.auditObservationImages || []).filter((_, itemIndex) => itemIndex !== index);
-  const input = qs("#auditObservationImageInput");
-  if (input) input.value = "";
 }
 
 function updateAuditPhotoPreview(fileName, sourceType) {
@@ -3593,16 +3636,7 @@ function bindAuditEvents() {
     });
     observationDropzone.addEventListener("drop", (event) => addAuditObservationImages(event.dataTransfer?.files));
   }
-  qsa("[data-observation-image-description]").forEach((field) => {
-    field.addEventListener("input", () => updateAuditObservationImageDescription(Number(field.dataset.observationImageDescription), field.value));
-  });
-  qsa("[data-remove-observation-image]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      removeAuditObservationImage(Number(button.dataset.removeObservationImage));
-      renderAudit();
-    });
-  });
+  bindAuditObservationImageControls();
   bindClick("#startAuditCamera", startAuditCamera);
   bindClick("#captureAuditCamera", captureAuditCameraPhoto);
   bindClick("#cancelAuditCamera", () => {
