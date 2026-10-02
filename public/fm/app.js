@@ -17,6 +17,7 @@ const state = {
   selectedRoleId: "administrator",
   selectedAuditPanel: "entry",
   auditYear: "2025",
+  auditEntity: "",
   currentSession: null,
   auditEntries: null,
   auditPage: 1,
@@ -60,6 +61,7 @@ const PROJECT_ID = "project_opsl_15000ha_development";
 const HIDDEN_REPORT_SHEETS = new Set(["Fund Req Aug26", "Bank Account Details", "OPSL AUG BUD req"]);
 const DEFAULT_BRAND_LOGO = "./public/agrinexus-logo.jpeg?v=4";
 const AUDIT_STORAGE_KEY = "fm2.auditEntries.v1";
+const AUDIT_ENTITY_STORAGE_KEY = "fm2.auditEntity.v1";
 const DEFAULT_AUDIT_YEARS = ["2030", "2029", "2028", "2027", "2026", "2025", "2024"];
 const AUDIT_DEPARTMENTS = [
   "Mill Department",
@@ -2927,6 +2929,40 @@ function auditYearHasReport(year) {
   return Number(state.auditYearCounts?.[String(year)] || 0) > 0;
 }
 
+function auditEntityValue(entries = []) {
+  if (state.auditEntity.trim()) return state.auditEntity.trim();
+  try {
+    const stored = localStorage.getItem(AUDIT_ENTITY_STORAGE_KEY);
+    if (stored && stored.trim()) {
+      state.auditEntity = stored.trim();
+      return state.auditEntity;
+    }
+  } catch {}
+  const fromEntries = entries.find((entry) => entry.entity || entry.companyName);
+  const value = fromEntries?.entity || fromEntries?.companyName || state.projectData?.company?.name || "";
+  state.auditEntity = value;
+  return value;
+}
+
+function updateAuditEntity(value) {
+  state.auditEntity = String(value || "").trim();
+  try {
+    localStorage.setItem(AUDIT_ENTITY_STORAGE_KEY, state.auditEntity);
+  } catch {}
+}
+
+function renderAuditEntityCard(entries) {
+  return `
+    <article class="panel audit-context-panel">
+      <label class="field">
+        <span>Company / estate</span>
+        <input id="auditEntity" value="${escapeHtml(auditEntityValue(entries))}" placeholder="Company or estate audited" />
+      </label>
+      <p>Key in once for this audit year. Each finding entered below will use this company or estate.</p>
+    </article>
+  `;
+}
+
 function renderAuditEntry(entries) {
   const today = new Date().toISOString().slice(0, 10);
   const latest = entries[0];
@@ -2947,10 +2983,6 @@ function renderAuditEntry(entries) {
             <select id="auditEntryYear" class="${auditYearHasReport(state.auditYear) ? "audit-year-has-report" : ""}">
               ${auditOptions(auditYears(), String(state.auditYear), state.auditYearCounts)}
             </select>
-          </label>
-          <label class="field">
-            <span>Entity / company</span>
-            <input id="auditEntity" placeholder="Company or estate audited" />
           </label>
           <label class="field">
             <span>Department</span>
@@ -3093,6 +3125,7 @@ function renderAuditEntry(entries) {
 function renderAuditReport(entries) {
   const rows = auditDepartmentRows(entries);
   const settings = auditReportSettings();
+  const reportEntity = auditEntityValue(entries);
   const auditPeriod = `${auditDateLabel(settings.auditPeriodStart)} to ${auditDateLabel(settings.auditPeriodEnd)}`;
   return `
     <div class="audit-report-layout">
@@ -3192,7 +3225,7 @@ function renderAuditReport(entries) {
                     <div><b>Impact</b><span class="multiline-text">${escapeHtml(entry.impact)}</span></div>
                     <div><b>Recommendation</b><span class="multiline-text">${escapeHtml(entry.recommendation)}</span></div>
                     <div class="audit-response-row">
-                      <span><b>Entity / Company</b>${escapeHtml(entry.entity || entry.companyName || state.projectData.company.name || "-")}</span>
+                      <span><b>Entity / Company</b>${escapeHtml(entry.entity || entry.companyName || reportEntity || "-")}</span>
                       <span><b>Owner</b>${escapeHtml(entry.owner || "-")}</span>
                       <span><b>Timeline</b>${auditDateLabel(entry.dueDate)}</span>
                       <span><b>Status</b><em class="risk ${auditStatusClass(entry.status)}">${escapeHtml(entry.status || "Open")}</em></span>
@@ -3371,6 +3404,7 @@ async function downloadAuditPdf() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         auditYear: state.auditYear,
+        auditEntity: auditEntityValue(),
         reportSettings: auditReportSettings(),
         brandingLogoUrl: brandLogoUrl(),
       }),
@@ -3426,6 +3460,8 @@ function bindAuditEvents() {
     state.auditPage = 1;
     renderAudit();
   });
+  bindEvent("#auditEntity", "input", (event) => updateAuditEntity(event.target.value));
+  bindEvent("#auditEntity", "change", (event) => updateAuditEntity(event.target.value));
   bindEvent("#auditReportYear", "change", (event) => {
     state.auditYear = event.target.value || "2025";
     state.auditPage = 1;
@@ -3462,7 +3498,7 @@ function bindAuditEvents() {
     const entry = {
       id: `audit_${Date.now()}`,
       auditYear: qs("#auditEntryYear")?.value || state.auditYear,
-      entity: qs("#auditEntity")?.value.trim() || state.projectData.company.name || "",
+      entity: auditEntityValue(),
       department: qs("#auditDepartment")?.value || "Unassigned",
       area: qs("#auditArea")?.value || "SOP compliance",
       priority: qs("#auditPriority")?.value || "High",
@@ -3530,7 +3566,10 @@ async function renderAudit() {
     </article>
   `;
   const entries = await loadAuditEntries();
-  workspace.innerHTML = state.selectedAuditPanel === "report" ? renderAuditReport(entries) : renderAuditEntry(entries);
+  workspace.innerHTML = `
+    ${renderAuditEntityCard(entries)}
+    ${state.selectedAuditPanel === "report" ? renderAuditReport(entries) : renderAuditEntry(entries)}
+  `;
   bindAuditEvents();
   applyBrandingLogo();
 }

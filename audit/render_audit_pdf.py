@@ -618,6 +618,10 @@ def draw_appendix_page(c, settings, logo, page_number, entries):
 def build_pdf(db_path: Path, project_id: str, payload) -> bytes:
     _database, _company, project, settings = load_context(db_path, project_id, payload)
     entries = sort_entries_for_report(payload.get("entries") or [])
+    audit_entity = text(payload.get("auditEntity") or settings.get("auditClientName"))
+    for entry in entries:
+        if audit_entity and not (entry.get("entity") or entry.get("companyName")):
+            entry["entity"] = audit_entity
     logo = logo_path(db_path, project, payload)
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=letter)
