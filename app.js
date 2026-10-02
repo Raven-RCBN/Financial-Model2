@@ -3087,37 +3087,32 @@ function renderAuditEntry(entries) {
             <span>Reference / asset tag</span>
             <input id="auditReference" value="${escapeHtml(draft.reference || "")}" placeholder="Optional asset, invoice, block, or SOP reference" />
           </label>
-          <label class="field wide">
+          <label class="field wide audit-observation-field">
             <span>Observations / Findings</span>
-            <textarea id="auditFinding" rows="4" placeholder="Write the audit issue observed in the field.">${escapeHtml(draft.finding || "")}</textarea>
-            <div class="audit-observation-dropzone ${observationImages.length ? "has-image" : ""}" id="auditObservationDropzone" tabindex="0" role="button" aria-label="Add images inside observation or finding">
-              <div>
-                <b>${observationImages.length ? "Add more observation images" : "Drop images here"}</b>
-                <span>Drag images from desktop into this observation, or click to choose.</span>
-              </div>
-            </div>
-            <input class="audit-file-input" id="auditObservationImageInput" type="file" accept="image/*" multiple />
-            ${observationImages.length ? `
-              <div class="audit-observation-images" id="auditObservationImages">
-                ${observationImages.map((item, index) => `
-                  <article class="audit-observation-image-card" data-observation-image-index="${index}">
-                    <img src="${escapeHtml(item.dataUrl)}" alt="Observation attachment ${index + 1}" />
-                    <label>
-                      <span>Description</span>
-                      <textarea class="audit-observation-image-description" data-observation-image-description="${index}" rows="2" placeholder="Describe what this image shows.">${escapeHtml(item.description || "")}</textarea>
-                    </label>
-                    <button type="button" class="audit-remove-observation-image" data-remove-observation-image="${index}">Remove</button>
-                  </article>
-                `).join("")}
-              </div>
-            ` : `
-              <div class="audit-observation-image-empty">
+            <div class="audit-observation-composer">
+              <textarea id="auditFinding" rows="4" placeholder="Write the audit issue observed in the field.">${escapeHtml(draft.finding || "")}</textarea>
+              <div class="audit-observation-dropzone ${observationImages.length ? "has-image" : ""}" id="auditObservationDropzone" tabindex="0" role="button" aria-label="Add images inside observation or finding">
                 <div>
-                  <b>No observation image added</b>
-                  <span>Images added here will appear directly below the observation text.</span>
+                  <b>${observationImages.length ? "Add more observation images" : "Drop images here"}</b>
+                  <span>Drag images from desktop into this observation, or click to choose.</span>
                 </div>
               </div>
-            `}
+              <input class="audit-file-input" id="auditObservationImageInput" type="file" accept="image/*" multiple />
+              ${observationImages.length ? `
+                <div class="audit-observation-images" id="auditObservationImages">
+                  ${observationImages.map((item, index) => `
+                    <article class="audit-observation-image-card" data-observation-image-index="${index}">
+                      <img src="${escapeHtml(item.dataUrl)}" alt="Observation attachment ${index + 1}" />
+                      <label>
+                        <span>Description</span>
+                        <textarea class="audit-observation-image-description" data-observation-image-description="${index}" rows="2" placeholder="Describe what this image shows.">${escapeHtml(item.description || "")}</textarea>
+                      </label>
+                      <button type="button" class="audit-remove-observation-image" data-remove-observation-image="${index}">Remove</button>
+                    </article>
+                  `).join("")}
+                </div>
+              ` : ""}
+            </div>
           </label>
           <label class="field wide">
             <span>Impact</span>

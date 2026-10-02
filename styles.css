@@ -3610,32 +3610,54 @@ p {
   outline: 3px solid rgba(8, 112, 192, 0.13);
 }
 
-.audit-observation-dropzone,
-.audit-observation-image-empty {
-  margin-top: 10px;
-  padding: 12px;
-  border: 1px dashed #9fc7df;
+.audit-observation-composer {
+  overflow: hidden;
+  border: 1px solid #cddae7;
   border-radius: 8px;
+  background: #fff;
+  display: grid;
+}
+
+.audit-observation-composer:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(8, 112, 192, 0.13);
+}
+
+.audit-form-grid .audit-observation-composer textarea#auditFinding {
+  min-height: 118px;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  background: #fff;
+}
+
+.audit-form-grid .audit-observation-composer textarea#auditFinding:focus {
+  border: 0;
+  outline: 0;
+}
+
+.audit-observation-dropzone {
+  padding: 12px;
+  border: 0;
+  border-top: 1px dashed #9fc7df;
+  border-radius: 0;
   background: #f4f9fd;
   color: var(--muted);
   cursor: pointer;
 }
 
 .audit-observation-dropzone.drag-over {
-  border-color: var(--blue);
   background: #eaf6ff;
-  outline: 3px solid rgba(8, 112, 192, 0.13);
 }
 
-.audit-observation-dropzone b,
-.audit-observation-image-empty b {
+.audit-observation-dropzone b {
   display: block;
   color: var(--ink-soft, #17324a);
   font-weight: 750;
 }
 
-.audit-observation-dropzone span,
-.audit-observation-image-empty span {
+.audit-observation-dropzone span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
@@ -3643,7 +3665,9 @@ p {
 }
 
 .audit-observation-images {
-  margin-top: 10px;
+  padding: 10px;
+  border-top: 1px solid #e2ebf2;
+  background: #fbfdff;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
