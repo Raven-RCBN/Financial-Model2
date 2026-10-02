@@ -22,6 +22,7 @@ const port = Number(process.env.PORT || 4173);
 const pythonPath = process.env.PYTHON || "python3";
 const brandLogoDir = path.join(__dirname, "public");
 const mirroredBrandLogoDir = path.join(__dirname, "public", "fm", "public");
+const auditUploadDir = path.join(__dirname, "audit", "uploads");
 const authSecret = process.env.FM2_AUTH_SECRET || "fm2-change-this-secret";
 const authCookieName = "fm2_session";
 const sessionTtlMs = 12 * 60 * 60 * 1000;
@@ -1048,6 +1049,68 @@ async function bodyJson(req) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+function safeFileSegment(value, fallback = "item") {
+  return String(value || fallback)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 72) || fallback;
+}
+
+function imageExtension(mimeType = "") {
+  const type = String(mimeType).toLowerCase();
+  if (type === "image/png") return "png";
+  if (type === "image/webp") return "webp";
+  if (type === "image/gif") return "gif";
+  return "jpg";
+}
+
+async function saveAuditDataUrlImage(dataUrl, projectId, auditYear, name = "audit-image") {
+  const match = String(dataUrl || "").match(/^data:(image\/(?:png|jpe?g|webp|gif));base64,([a-z0-9+/=\s]+)$/i);
+  if (!match) return "";
+  const buffer = Buffer.from(match[2].replace(/\s+/g, ""), "base64");
+  if (!buffer.length) return "";
+  const yearSegment = safeFileSegment(auditYear || "undated", "undated");
+  const projectSegment = safeFileSegment(projectId || "project", "project");
+  const hash = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 16);
+  const nameSegment = safeFileSegment(path.parse(name || "audit-image").name, "audit-image");
+  const ext = imageExtension(match[1]);
+  const fileName = `${Date.now()}-${hash}-${nameSegment}.${ext}`;
+  const relativeUrl = `/audit/uploads/${projectSegment}/${yearSegment}/${fileName}`;
+  const absolute = path.join(__dirname, relativeUrl);
+  if (!absolute.startsWith(auditUploadDir)) throw new Error("Audit upload path is invalid");
+  await fs.mkdir(path.dirname(absolute), { recursive: true });
+  await fs.writeFile(absolute, buffer);
+  return relativeUrl;
+}
+
+async function persistAuditEntryImages(projectId, entry = {}) {
+  const auditYear = entry.auditYear || "";
+  const next = { ...entry };
+  if (typeof next.photoDataUrl === "string" && next.photoDataUrl.startsWith("data:image/")) {
+    const photoUrl = await saveAuditDataUrlImage(next.photoDataUrl, projectId, auditYear, next.photoName || "field-photo");
+    if (photoUrl) {
+      next.photoUrl = photoUrl;
+      delete next.photoDataUrl;
+    }
+  }
+  if (Array.isArray(next.observationImages)) {
+    next.observationImages = await Promise.all(next.observationImages.map(async (item, index) => {
+      if (!item || typeof item !== "object") return item;
+      if (typeof item.dataUrl === "string" && item.dataUrl.startsWith("data:image/")) {
+        const url = await saveAuditDataUrlImage(item.dataUrl, projectId, auditYear, item.name || `observation-${index + 1}`);
+        return {
+          url,
+          name: String(item.name || `Observation image ${index + 1}`),
+          description: String(item.description || ""),
+        };
+      }
+      return item;
+    }));
+  }
+  return next;
+}
+
 function csvEscape(value) {
   if (value == null) return "";
   const text = String(value);
@@ -1604,7 +1667,8 @@ async function api(req, res, url) {
     if (req.method === "POST") {
       try {
         const patch = await bodyJson(req);
-        const result = await createAuditEntry(dbPath, projectId, patch);
+        const persistedPatch = await persistAuditEntryImages(projectId, patch);
+        const result = await createAuditEntry(dbPath, projectId, persistedPatch);
         return send(req, res, 201, result, "application/json; charset=utf-8", { cacheControl: "no-store" });
       } catch (error) {
         if (error.statusCode === 400) return badRequest(req, res, error.message);
@@ -1886,7 +1950,7 @@ async function staticFile(req, res, url) {
   try {
     const data = await fs.readFile(absolute);
     const ext = path.extname(absolute);
-    const cacheControl = [".css", ".js", ".png", ".svg", ".json"].includes(ext)
+    const cacheControl = [".css", ".js", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".json"].includes(ext)
       ? "public, max-age=60, stale-while-revalidate=300"
       : "no-cache";
     send(req, res, 200, data, mime[ext] || "application/octet-stream", { cacheControl });

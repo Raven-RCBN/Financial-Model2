@@ -41,3 +41,7 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+
+# runtime audit uploads
+/audit/uploads/*
+!/audit/uploads/.gitkeep
