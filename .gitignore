@@ -45,3 +45,6 @@ yarn-error.log*
 # runtime audit uploads
 /audit/uploads/*
 !/audit/uploads/.gitkeep
+
+# Dedicated audit login records (runtime data, never publish)
+data/audit-users.json

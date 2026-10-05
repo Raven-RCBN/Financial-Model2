@@ -660,6 +660,55 @@ def draw_appendix_page(c, settings, logo, page_number, entries):
     draw_table(c, table, LEFT, TOP - 0.65 * inch)
 
 
+def draw_action_tracking(c, settings, logo, page_number, entries):
+    tracked = [entry for entry in entries if entry.get("actions")]
+    if not tracked:
+        return
+    s = styles()
+    y = 0
+
+    def new_page():
+        nonlocal y, page_number
+        c.showPage()
+        page_number += 1
+        draw_header_footer(c, settings, logo, page_number)
+        c.setFont("Helvetica-Bold", 15)
+        c.drawString(LEFT, TOP - 0.25 * inch, "Corrective Actions and Responses")
+        y = TOP - 0.6 * inch
+
+    def write_line(value):
+        nonlocal y
+        remaining = [paragraph(value, s["small"])]
+        while remaining:
+            item = remaining.pop(0)
+            width, height = item.wrap(7.05 * inch, 10000)
+            if y - height < 0.8 * inch:
+                pieces = item.split(7.05 * inch, max(0, y - 0.8 * inch))
+                if pieces:
+                    first = pieces.pop(0)
+                    _, h = first.wrap(7.05 * inch, 10000)
+                    first.drawOn(c, LEFT, y - h)
+                    remaining = pieces + remaining
+                else:
+                    remaining.insert(0, item)
+                new_page()
+            else:
+                item.drawOn(c, LEFT, y - height)
+                y -= height + 8
+
+    new_page()
+    for entry in tracked:
+        write_line("Finding: " + text(entry.get("finding")))
+        for index, action in enumerate(entry.get("actions", []), 1):
+            write_line(f"Action {index}: " + text(action.get("description")))
+            write_line("Responsible person: " + text(action.get("owner")) + " | Email: " + text(action.get("email")))
+            write_line("Action due: " + date_label(action.get("dueDate")) + " | Status: " + text(action.get("status")))
+            write_line("Response / follow-up due: " + date_label(action.get("responseDueDate")))
+            for reply in action.get("responses", []):
+                write_line("Reply by " + text(reply.get("author")) + " (" + text(reply.get("email")) + ") | " + text(reply.get("createdAt")) + " | Follow-up due: " + date_label(reply.get("dueDate")))
+                write_line(text(reply.get("text")))
+
+
 def build_pdf(db_path: Path, project_id: str, payload) -> bytes:
     _database, _company, project, settings = load_context(db_path, project_id, payload)
     entries = sort_entries_for_report(payload.get("entries") or [])
@@ -694,6 +743,7 @@ def build_pdf(db_path: Path, project_id: str, payload) -> bytes:
         page_number += 1
 
     draw_appendix_page(c, settings, logo, page_number, entries)
+    draw_action_tracking(c, settings, logo, page_number, entries)
     c.save()
     return buffer.getvalue()
 

@@ -6,7 +6,7 @@
     <title>Plantation Financial Model</title>
     <link rel="icon" type="image/png" sizes="32x32" href="./public/agrinexus-favicon-32.png?v=6" />
     <link rel="apple-touch-icon" sizes="180x180" href="./public/apple-touch-icon.png?v=6" />
-    <link rel="stylesheet" href="./styles.css?v=25" />
+    <link rel="stylesheet" href="./styles.css?v=26" />
   </head>
   <body>
     <div class="app-shell">
@@ -141,7 +141,8 @@
                 <div class="mc-tabs" id="managementTabs" aria-label="Management console tabs">
                   <button class="active" data-management-tab="settings">Master Settings</button>
                   <button data-management-tab="governance">Governance</button>
-                  <button data-management-tab="users">Users</button>
+                  <button data-management-tab="users">FM2 Users</button>
+                  <button data-management-tab="audit-users">Audit Users &amp; Roles</button>
                   <button data-management-tab="calculations">Calculations</button>
                   <button data-management-tab="validation">Validation</button>
                 </div>
@@ -160,8 +161,12 @@
                     <span>Workflow authority and screen access</span>
                   </button>
                   <button data-management-tab="users">
-                    <b>User Directory</b>
+                    <b>FM2 User Directory</b>
                     <span>Assigned users and account status</span>
+                  </button>
+                  <button data-management-tab="audit-users">
+                    <b>Audit User Directory</b>
+                    <span>Audit creators, corrective action authors and respondents</span>
                   </button>
                   <button data-management-tab="calculations">
                     <b>Calculation Engine</b>
@@ -358,6 +363,30 @@
                           <tbody id="managementUserDirectory"></tbody>
                         </table>
                       </div>
+                    </article>
+                  </section>
+
+                  <section class="mc-section" data-management-panel="audit-users" hidden>
+                    <article class="mc-panel user-directory-panel">
+                      <header><div><span class="eyebrow">Audit Users &amp; Roles</span><h3>Audit User Directory</h3></div><span class="status-pill">Admin only</span></header>
+                      <p class="audit-directory-note">Manage audit assignments independently from FM2 users. Administrators have all audit permissions. Create dedicated Audit sign-in accounts here. Audit users can access only the Audit module. Set a password when adding a user; leave it blank when editing to keep the current password.</p>
+                      <div class="directory-scroll"><table class="permission-table user-directory"><thead><tr><th>Sign-in username</th><th>Email</th><th>Audit roles</th><th>Status</th><th>Actions</th></tr></thead><tbody id="auditUserDirectory"></tbody></table></div>
+                      <form id="auditUserForm" class="audit-directory-form">
+                        <h4>Add / edit audit user</h4><input type="hidden" name="id" />
+                        <div class="audit-action-grid">
+                          <label class="field"><span>Sign-in username</span><input name="name" required /></label>
+                          <label class="field"><span>Email</span><input name="email" type="email" required /></label>
+                          <label class="field"><span>Password (new or reset)</span><input name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" /></label>
+                          <label class="field"><span>Status</span><select name="status"><option>Active</option><option>Inactive</option></select></label>
+                        </div>
+                        <fieldset><legend>Audit roles — select one or more</legend>
+                          <label class="audit-permission-option"><input type="checkbox" name="create" /> Audit creator — create observations and findings</label>
+                          <label class="audit-permission-option"><input type="checkbox" name="recommend" /> Corrective action author — add actions, owners and due dates</label>
+                          <label class="audit-permission-option"><input type="checkbox" name="respond" /> Assigned respondent — reply and update status on actions assigned to their email</label>
+                        </fieldset>
+                        <button class="primary-button" type="submit">Save audit user</button> <button class="secondary-button" type="button" id="cancelAuditUserEdit">Clear</button>
+                        <p id="auditDirectoryStatus" role="status"></p>
+                      </form>
                     </article>
                   </section>
 
@@ -592,6 +621,6 @@
         </section>
       </main>
     </div>
-    <script src="./app.js?v=25"></script>
+    <script src="./app.js?v=audits-25"></script>
   </body>
 </html>

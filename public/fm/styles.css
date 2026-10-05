@@ -4502,3 +4502,37 @@ p {
     max-height: none;
   }
 }
+
+/* Per-action ownership, deadlines, and response history. */
+.audit-actions-editor { grid-column: 1 / -1; min-width: 0; }
+.audit-action-card { margin: 12px 0; padding: 16px; border: 1px solid #cddfea; border-left: 5px solid #3682b4; border-radius: 10px; background: #fff; overflow-wrap: anywhere; }
+.audit-action-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.audit-action-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.audit-action-description { grid-column: 1 / -1; }
+.audit-action-grid .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.audit-action-grid input, .audit-action-grid textarea, .audit-action-grid select { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #c6d9e8; border-radius: 6px; font: inherit; background: #fff; color: #18334b; }
+.audit-action-overdue { border-color: #c43730; background: #fff4f2; color: #902720; }
+.audit-action-soon { border-color: #b87910; background: #fff9e9; color: #775006; }
+.audit-action-closed { border-color: #298052; background: #f0faf4; }
+.audit-action-badge { display: inline-block; padding: 5px 10px; border-radius: 5px; font-weight: 700; }
+.audit-action-reply { border-top: 1px solid #cddfea; padding: 10px 0; }
+.audit-action-reply small { display: block; margin-top: 4px; }
+.audit-action-reply-form { border-top: 1px solid #cddfea; padding-top: 12px; }
+.audit-action-reply-form button { margin-top: 12px; }
+.audit-reply-status { margin-left: 10px; }
+@media (max-width: 800px) { .audit-action-grid { grid-template-columns: 1fr; } }
+@media print { .audit-action-reply-form { display: none; } }
+
+.audit-permission-option { display: block; white-space: nowrap; margin: 6px 0; }
+.audit-permission-option input { width: auto; }
+.audit-add-action-form { padding: 16px; border: 1px solid #cddfea; border-radius: 10px; }
+@media print { .audit-add-action-form { display: none; } }
+
+.audit-directory-note, .audit-directory-form { padding: 16px; }
+.audit-directory-form fieldset { margin: 16px 0; border: 1px solid #cddfea; border-radius: 8px; padding: 12px; }
+[data-management-tab][hidden], [data-management-panel][hidden] { display: none !important; }
+
+[data-management-panel="audit-users"] .user-directory { min-width: 0; width: 100%; table-layout: auto; }
+[data-management-panel="audit-users"] td { white-space: normal; overflow-wrap: anywhere; }
+.audit-action-card details { margin: 12px 0; }
+@media print { .audit-action-card details { display: none; } }

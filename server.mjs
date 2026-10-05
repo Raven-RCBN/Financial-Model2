@@ -14,6 +14,8 @@ import {
   seedAuditEntries,
 } from "./audit/audit-store.mjs";
 
+import { auditIdentity, applyAuditWrite, hashAuditPassword, verifyAuditPassword, auditApiAllowed } from "./audit/audit-permissions.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.FM2_DB_PATH || path.join(__dirname, "data", "plantation-financial-model.db.json");
 const cpoCachePath = path.join(__dirname, "public-cpo-data.json");
@@ -23,6 +25,8 @@ const pythonPath = process.env.PYTHON || "python3";
 const brandLogoDir = path.join(__dirname, "public");
 const mirroredBrandLogoDir = path.join(__dirname, "public", "fm", "public");
 const auditUploadDir = path.join(__dirname, "audit", "uploads");
+let auditDirectoryCache = {};
+const auditUsersPath = path.join(path.dirname(dbPath), "audit-users.json");
 const authSecret = process.env.FM2_AUTH_SECRET || "fm2-change-this-secret";
 const authCookieName = "fm2_session";
 const sessionTtlMs = 12 * 60 * 60 * 1000;
@@ -156,12 +160,18 @@ function sessionSignature(payload) {
 }
 
 function createSessionToken(userId) {
-  const payload = Buffer.from(JSON.stringify({ userId, expiresAt: Date.now() + sessionTtlMs })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ userId, authVersion: userById(userId)?.credential?.salt, expiresAt: Date.now() + sessionTtlMs })).toString("base64url");
   return `${payload}.${sessionSignature(payload)}`;
 }
 
 function userById(userId) {
-  return authUsers.find((user) => user.userId === userId) || null;
+  const base = authUsers.find(user => user.userId === userId);
+  if (base) return base;
+  for (const [projectId, users] of Object.entries(auditDirectoryCache)) {
+    const user = users.find(user => user.name === userId && user.status === "Active" && user.credential);
+    if (user) return {userId, role: "audit", credential: user.credential, projectIds: [projectId]};
+  }
+  return null;
 }
 
 function currentSession(req) {
@@ -173,7 +183,8 @@ function currentSession(req) {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     const user = userById(session.userId);
     if (!user || Number(session.expiresAt) <= Date.now()) return null;
-    return { userId: user.userId, role: user.role, expiresAt: Number(session.expiresAt) };
+    if (user.role === "audit" && session.authVersion !== user.credential.salt) return null;
+    return { userId: user.userId, role: user.role, projectIds: user.projectIds, expiresAt: Number(session.expiresAt) };
   } catch {
     return null;
   }
@@ -303,13 +314,13 @@ async function handleLogin(req, res, url) {
   const body = new URLSearchParams(await requestBodyText(req));
   const userId = body.get("userid") || body.get("userId") || body.get("username") || "";
   const password = body.get("password") || "";
-  const user = authUsers.find((candidate) => timingSafeTextEqual(userId, candidate.userId));
-  if (!user || !timingSafeTextEqual(password, user.password)) {
+  const user = userById(userId);
+  if (!user || !(user.role === "audit" ? verifyAuditPassword(password, user.credential) : timingSafeTextEqual(password, user.password))) {
     return sendLoginPage(req, res, 401, "Invalid user ID or password.", returnTo);
   }
 
   res.writeHead(303, {
-    Location: returnTo,
+    Location: user.role === "audit" ? "/audit" : returnTo,
     "Set-Cookie": `${authCookieName}=${encodeURIComponent(createSessionToken(user.userId))}; ${cookieOptions(req)}`,
     "Cache-Control": "no-store",
   });
@@ -1593,6 +1604,7 @@ async function marketTicker(payload) {
 }
 
 async function api(req, res, url) {
+  if (!auditApiAllowed(currentSession(req), url.pathname, req.method)) return forbidden(req, res, "Audit accounts can access Audit only.");
   const db = await readDb();
   const indexes = buildIndexes(db);
   if (req.method === "GET" && url.pathname === "/api/cpo-market") {
@@ -1647,7 +1659,41 @@ async function api(req, res, url) {
     const records = filterCollection(payload.reportSnapshots, url, ["sheetName", "dimensions", "status"]);
     return send(req, res, 200, pageItems(records, url, 20, 100));
   }
+  let auditDirectories = {};
+  try { auditDirectories = JSON.parse(await fs.readFile(auditUsersPath, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  const auditUsers = auditDirectories[projectId] || [];
+  const auditActor = auditIdentity(currentSession(req), auditUsers);
+  if (child === "audit-context" && req.method === "GET") {
+    const settings = payload.project.settings || {};
+    return send(req, res, 200, {company: {name: payload.company.name}, project: {id: projectId, name: payload.project.name, settings: {auditSetup: settings.auditSetup, auditReport: settings.auditReport, brandingLogoUrl: settings.brandingLogoUrl}}}, "application/json; charset=utf-8", {cacheControl: "no-store"});
+  }
+  if (child === "audit-access") {
+    if (!auditActor.userId) return forbidden(req, res);
+    if (req.method === "GET") return send(req, res, 200, {users: auditActor.admin ? auditUsers.map(({credential, ...user}) => user) : [], identity: auditActor}, "application/json; charset=utf-8", {cacheControl: "no-store"});
+    if (req.method !== "PUT") return notFound(req, res);
+    if (!auditActor.admin) return forbidden(req, res, "Only administrators can assign audit permissions.");
+    const patch = await bodyJson(req);
+    if (!Array.isArray(patch.users) || new Set(patch.users.map(user => String(user?.name || "").trim())).size !== patch.users.length) return badRequest(req, res, "Provide users with unique sign-in usernames.");
+    if (patch.users.some(user => !user || typeof user.name !== "string" || !user.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email || ""))) return badRequest(req, res, "A username and valid email are required for each audit user.");
+    const otherUsers = Object.entries(auditDirectories).filter(([id]) => id !== projectId).flatMap(([, users]) => users);
+    const users = [];
+    for (const user of patch.users) {
+      user.name = user.name.trim();
+      if (authUsers.some(account => account.userId === user.name) || otherUsers.some(account => account.name === user.name)) return badRequest(req, res, "Audit usernames must be separate from existing FM2 and other project accounts.");
+      const existing = auditUsers.find(item => item.id === user.id && item.name === user.name);
+      let credential = existing?.credential;
+      try { if (user.password) credential = hashAuditPassword(user.password); }
+      catch (error) { return badRequest(req, res, error.message); }
+      if (!credential) return badRequest(req, res, "Set a password of at least 12 characters for each new Audit account.");
+      users.push({id: String(user.id), name: user.name.trim(), email: String(user.email).trim().toLowerCase(), status: user.status === "Active" ? "Active" : "Inactive", credential, auditPermissions: {create: user.auditPermissions?.create === true, recommend: user.auditPermissions?.recommend === true, respond: user.auditPermissions?.respond === true}});
+    }
+    auditDirectories[projectId] = users;
+    await fs.writeFile(auditUsersPath, JSON.stringify(auditDirectories, null, 2) + "\n", {mode: 0o600});
+    auditDirectoryCache = auditDirectories;
+    return send(req, res, 200, {users: users.map(({credential, ...user}) => user), identity: auditIdentity(currentSession(req), users)});
+  }
   if (child === "audit-seed") {
+    if (!auditActor.admin) return forbidden(req, res);
     if (!canAccessAudit(req)) return forbidden(req, res, "Audit access requires a signed-in user.");
     if (req.method !== "POST") return notFound(req, res);
     return send(req, res, 200, await seedAuditEntries(dbPath, projectId, url.searchParams.get("auditYear") || ""), "application/json; charset=utf-8", { cacheControl: "no-store" });
@@ -1667,11 +1713,13 @@ async function api(req, res, url) {
     if (req.method === "POST") {
       try {
         const patch = await bodyJson(req);
-        const persistedPatch = await persistAuditEntryImages(projectId, patch);
+        const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === patch.id);
+        const authorized = applyAuditWrite(auditActor, patch, existing);
+        const persistedPatch = await persistAuditEntryImages(projectId, authorized);
         const result = await createAuditEntry(dbPath, projectId, persistedPatch);
         return send(req, res, 201, result, "application/json; charset=utf-8", { cacheControl: "no-store" });
       } catch (error) {
-        if (error.statusCode === 400) return badRequest(req, res, error.message);
+        if ([400, 403, 404].includes(error.statusCode)) return send(req, res, error.statusCode, {message: error.message});
         throw error;
       }
     }
@@ -1943,10 +1991,15 @@ async function api(req, res, url) {
 }
 
 async function staticFile(req, res, url) {
-  let filePath = ["/", "/app"].includes(url.pathname) ? "/index.html" : decodeURIComponent(url.pathname);
+  const session = currentSession(req);
+  let filePath = ["/", "/app", "/audit"].includes(url.pathname) ? (session?.role === "audit" ? "/audit.html" : "/index.html") : decodeURIComponent(url.pathname);
+  if (session?.role === "audit") {
+    const staticAllowed = ["/audit.html", "/app.js", "/styles.css"].includes(filePath) || /^\/public\/[a-zA-Z0-9_.-]+\.(png|jpe?g|svg|webp)$/.test(filePath) || session.projectIds.some(id => filePath.startsWith(`/audit/uploads/${id}/`) && /^[-a-zA-Z0-9_./]+$/.test(filePath) && !filePath.includes(".."));
+    if (!staticAllowed) return forbidden(req, res, "Audit accounts can access Audit only.");
+  }
   filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, "");
   const absolute = path.join(publicRoot, filePath);
-  if (!absolute.startsWith(publicRoot)) return notFound(req, res);
+  if (!absolute.startsWith(publicRoot) || absolute === auditUsersPath) return notFound(req, res);
   try {
     const data = await fs.readFile(absolute);
     const ext = path.extname(absolute);
@@ -1982,6 +2035,7 @@ async function publicIconFile(req, res, url) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    try { auditDirectoryCache = JSON.parse(await fs.readFile(auditUsersPath, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; auditDirectoryCache = {}; }
     const url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
     if (req.method === "GET" && await publicIconFile(req, res, url)) return;
     if (url.pathname === "/" && req.method === "GET") return sendLoginPage(req, res, 200, "", "/app");

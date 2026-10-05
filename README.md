@@ -126,3 +126,15 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+
+## Audit users and corrective actions
+
+Administrators manage a separate **Audit User Directory** in Management Console. Create a dedicated username, email and password (12–256 characters), then grant one or more roles: Audit creator, Corrective action author, or Assigned respondent. FM2 usernames cannot be reused for Audit accounts. Only administrators see the user directories and role-management menus.
+
+Audit accounts sign in through the existing login page and land at `/audit`. They receive an Audit-only page and cannot access FM2 APIs, financial data files, reports, or management routes. The server grants replies only to the action's assigned email or an administrator. Password resets and disabling/removing an account invalidate its existing sessions.
+
+Each finding supports multiple actions with an owner, email, deadline and response history. Reports highlight overdue and upcoming actions and include action details in the PDF appendix. Administrators and action authors can update assignments while preserving responses.
+
+Audit accounts and salted password hashes are stored in `audit-users.json` beside the runtime database; this file is excluded from Git and direct web access. Preserve it, `audit-entries.json`, the financial database and `audit/uploads/` during deployment. Account changes do not send email.
+
+Run the audit permission and persistence checks with `node --test tests/audit-workflow.test.mjs`.

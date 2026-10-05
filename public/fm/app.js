@@ -209,10 +209,10 @@ async function requestJson(path, options) {
       ...options,
     });
     if (response.ok) return response.json();
-    if (response.status === 401 || response.status === 403) throw new Error(`Request failed: ${response.status}`);
+    if ([400, 401, 403, 409, 422, 500].includes(response.status)) throw Object.assign(new Error(`Request failed: ${response.status}`), {noFallback: true});
     if (!usesLocalFallback(path)) throw new Error(`Request failed: ${response.status}`);
   } catch (error) {
-    if (!usesLocalFallback(path)) throw error;
+    if (error.noFallback || !usesLocalFallback(path)) throw error;
   }
   return localRequestJson(path, options);
 }
@@ -359,9 +359,34 @@ async function localRequestJson(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const body = options.body ? JSON.parse(options.body) : {};
 
+  if (child === "audit-access") {
+    if (method === "PUT") localStorage.setItem("fm2.auditUsers.v1", JSON.stringify(body.users));
+    return {users: JSON.parse(localStorage.getItem("fm2.auditUsers.v1") || "[]"), identity: {userId: "admin", admin: true, create: true, recommend: true, respond: true}};
+  }
   if (child === "audit-entries") {
     const current = auditEntries();
     if (method === "POST") {
+      if (body.operation) {
+        const existing = current.find(entry => entry.id === body.id);
+        if (!existing) throw new Error("Finding not found");
+        const actions = auditActionsFor(existing);
+        if (body.operation === "add-action") actions.push({...body.action, id: crypto.randomUUID(), status: "Open", responses: []});
+        else if (body.operation === "update-action") {
+          const action = actions.find(action => action.id === body.actionId);
+          if (!action) throw new Error("Action not found");
+          Object.assign(action, body.action);
+        }
+        else if (body.operation === "reply") {
+          const action = actions.find(action => action.id === body.actionId);
+          if (!action) throw new Error("Action not found");
+          action.status = body.status;
+          action.responseDueDate = body.dueDate;
+          action.responses = [...(action.responses || []), {id: crypto.randomUUID(), text: body.text, dueDate: body.dueDate, author: "admin", createdAt: new Date().toISOString()}];
+        }
+        const entry = {...existing, actions, recommendation: actions.map(action => action.description).join("\n\n"), status: actions.every(action => action.status === "Closed") ? "Closed" : "In progress"};
+        saveAuditEntries([entry, ...current.filter(item => item.id !== entry.id)]);
+        return {entry, backend: "local"};
+      }
       const entry = {
         ...body,
         id: body.id || `audit_${Date.now()}`,
@@ -691,11 +716,24 @@ function auditReportSettings(year = state.auditYear || "2025") {
   };
 }
 
+function auditPermission(key) {
+  return state.currentSession?.role === "admin" || Boolean(state.auditIdentity?.[key]);
+}
+function canReplyToAuditAction(action) {
+  return state.currentSession?.role === "admin" || (auditPermission("respond") && state.auditIdentity?.email && state.auditIdentity.email.toLowerCase() === String(action.email || "").toLowerCase());
+}
+async function saveAuditUserPermissions() {
+  const result = await requestJson(`/api/projects/${PROJECT_ID}/audit-access`, {method: "PUT", body: JSON.stringify({users: state.auditUsers || []})});
+  state.auditUsers = result.users;
+  state.auditIdentity = result.identity;
+}
+
 function canAccessAudit() {
   return Boolean(state.currentSession?.userId);
 }
 
 function applySessionUi() {
+  qsa('[data-management-tab="users"], [data-management-tab="governance"], [data-management-tab="audit-users"], [data-management-panel="users"], [data-management-panel="governance"], [data-management-panel="audit-users"]').forEach(element => element.hidden = state.currentSession?.role !== "admin");
   const sessionUser = qs("#sessionUser");
   if (sessionUser) sessionUser.value = state.currentSession?.userId || "";
   qsa("[data-admin-only='true']").forEach((element) => {
@@ -1108,7 +1146,7 @@ function bindManagementConsoleNavigation() {
 }
 
 function setManagementConsoleTab(tab) {
-  const selected = tab || "settings";
+  const selected = ["users", "governance", "audit-users"].includes(tab) && state.currentSession?.role !== "admin" ? "settings" : tab || "settings";
   state.selectedManagementTab = selected;
   qsa("[data-management-tab]").forEach((button) => {
     button.classList.toggle("active", button.dataset.managementTab === selected);
@@ -1205,6 +1243,46 @@ function removeAuditSetupValue(type, value) {
   renderAudit();
 }
 
+function renderAuditDirectory() {
+  const target = qs("#auditUserDirectory");
+  if (!target) return;
+  if (state.currentSession?.role !== "admin") { target.innerHTML = ""; return; }
+  const users = state.auditUsers || [];
+  target.innerHTML = users.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${[["create", "Audit creator"], ["recommend", "Corrective action author"], ["respond", "Assigned respondent"]].filter(([key]) => user.auditPermissions?.[key]).map(([, label]) => escapeHtml(label)).join("<br>") || "No permissions"}</td><td>${escapeHtml(user.status)}</td><td><button class="secondary-button" data-edit-audit-user="${escapeHtml(user.id)}">Edit</button> <button class="secondary-button" data-delete-audit-user="${escapeHtml(user.id)}">Remove</button></td></tr>`).join("") || '<tr><td colspan="5">No audit users assigned. Add an audit user below.</td></tr>';
+  const form = qs("#auditUserForm");
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(form));
+    const name = values.name.trim();
+    const email = values.email.trim();
+    if (!name || !email) return;
+    const feedback = qs("#auditDirectoryStatus");
+    if (users.some(user => user.name === name && user.id !== values.id)) { feedback.textContent = "This audit username is already assigned."; return; }
+    const user = {id: values.id || crypto.randomUUID(), name, email, ...(values.password ? {password: values.password} : {}), status: values.status, auditPermissions: {create: values.create === "on", recommend: values.recommend === "on", respond: values.respond === "on"}};
+    const previous = structuredClone(users);
+    state.auditUsers = [...users.filter(item => item.id !== user.id), user];
+    const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    try { await saveAuditUserPermissions(); form.reset(); form.elements.id.value = ""; feedback.textContent = "Audit user and roles saved."; renderAuditDirectory(); }
+    catch (error) { state.auditUsers = previous; feedback.textContent = error.message; }
+    finally { submit.disabled = false; }
+  };
+  qs("#cancelAuditUserEdit").onclick = () => { form.reset(); form.elements.id.value = ""; };
+  qsa("[data-edit-audit-user]").forEach(button => button.onclick = () => {
+    const user = users.find(item => item.id === button.dataset.editAuditUser);
+    for (const key of ["id", "name", "email", "status"]) form.elements[key].value = user[key] || "";
+    for (const key of ["create", "recommend", "respond"]) form.elements[key].checked = Boolean(user.auditPermissions?.[key]);
+    form.elements.password.value = "";
+    form.elements.name.focus();
+  });
+  qsa("[data-delete-audit-user]").forEach(button => button.onclick = async () => {
+    const previous = structuredClone(users);
+    state.auditUsers = users.filter(user => user.id !== button.dataset.deleteAuditUser);
+    button.disabled = true;
+    try { await saveAuditUserPermissions(); renderAuditDirectory(); }
+    catch (error) { state.auditUsers = previous; qs("#auditDirectoryStatus").textContent = error.message; button.disabled = false; }
+  });
+}
+
 function renderManagementGovernance() {
   qs("#managementRoleList").innerHTML = state.managementRoles
     .map((role) => `
@@ -1258,6 +1336,7 @@ function renderManagementGovernance() {
   qsa(".edit-management-user").forEach((button) => button.addEventListener("click", () => editManagementUser(button.dataset.userId)));
   qsa(".reset-management-user").forEach((button) => button.addEventListener("click", () => resetManagementUser(button.dataset.userId)));
   qsa(".delete-management-user").forEach((button) => button.addEventListener("click", () => deleteManagementUser(button.dataset.userId)));
+  renderAuditDirectory();
   renderManagementStats();
 }
 
@@ -1442,6 +1521,7 @@ function slugId(value) {
 }
 
 function addManagementRole() {
+  if (state.currentSession?.role !== "admin") return;
   const name = window.prompt("Role name");
   if (!name) return;
   const note = window.prompt("Role description", "Define access level") || "Define access level";
@@ -1452,7 +1532,8 @@ function addManagementRole() {
   setManagementConsoleTab("governance");
 }
 
-function addManagementUser() {
+async function addManagementUser() {
+  if (state.currentSession?.role !== "admin") return;
   const name = window.prompt("User name");
   if (!name) return;
   const email = window.prompt("Email address", `${slugId(name)}@agrinexus.ai`) || "";
@@ -1470,7 +1551,8 @@ function addManagementUser() {
   setManagementConsoleTab("users");
 }
 
-function editManagementUser(userId) {
+async function editManagementUser(userId) {
+  if (state.currentSession?.role !== "admin") return;
   const user = state.managementUsers.find((item) => item.id === userId);
   if (!user) return;
   const role = window.prompt("Role", user.role);
@@ -1482,7 +1564,8 @@ function editManagementUser(userId) {
   setManagementConsoleTab("users");
 }
 
-function resetManagementUser(userId) {
+async function resetManagementUser(userId) {
+  if (state.currentSession?.role !== "admin") return;
   const user = state.managementUsers.find((item) => item.id === userId);
   if (!user) return;
   user.status = "Pending reset";
@@ -1490,7 +1573,8 @@ function resetManagementUser(userId) {
   setManagementConsoleTab("users");
 }
 
-function deleteManagementUser(userId) {
+async function deleteManagementUser(userId) {
+  if (state.currentSession?.role !== "admin") return;
   const user = state.managementUsers.find((item) => item.id === userId);
   if (!user || user.locked) return;
   if (!window.confirm(`Delete ${user.name}?`)) return;
@@ -3008,12 +3092,85 @@ function renderAuditEntityCard(entries) {
   `;
 }
 
+function auditActionTiming(action) {
+  if (action.status === "Closed") return { label: "Closed", tone: "closed" };
+  if (!action.dueDate) return { label: "No due date", tone: "pending" };
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((Date.parse(`${action.dueDate}T00:00:00Z`) - today) / 86400000);
+  if (days < 0) return { label: `Overdue by ${-days} day${days === -1 ? "" : "s"}`, tone: "overdue" };
+  if (days <= 7) return { label: days === 0 ? "Due today" : `Due in ${days} days`, tone: "soon" };
+  return { label: "On track", tone: "pending" };
+}
+
+function auditActionsFor(entry) {
+  if (!entry.actions?.length && (!entry.recommendation || entry.recommendation === "Corrective action pending assignment.")) return [];
+  return entry.actions?.length ? entry.actions : [{ id: "legacy", description: entry.recommendation || "", owner: entry.owner || "", email: "", dueDate: entry.dueDate || "", status: entry.status || "Open", responses: [] }];
+}
+
+function readAuditActionDrafts() {
+  return Array.from(document.querySelectorAll("[data-audit-action-draft]")).map((card) => {
+    const value = (key) => card.querySelector(`[data-action-field="${key}"]`)?.value.trim() || "";
+    return { id: card.dataset.auditActionDraft, description: value("description"), owner: value("owner"), email: value("email"), dueDate: value("dueDate"), status: value("status"), response: value("response"), responseDueDate: value("responseDueDate") };
+  });
+}
+
+function renderAuditActionDraft(action, index) {
+  const input = (label, key, type = "text", required = true) => `<label class="field"><span>${label}</span><input data-action-field="${key}" type="${type}" value="${escapeHtml(action[key] || "")}" ${required ? "required" : ""} /></label>`;
+  return `<section class="audit-action-card" data-audit-action-draft="${escapeHtml(action.id)}">
+    <header><b>Corrective action ${index + 1}</b>${index ? '<button type="button" class="secondary-button" data-remove-audit-action>Remove action</button>' : ""}</header>
+    <div class="audit-action-grid">
+      <label class="field audit-action-description"><span>Corrective action</span><textarea data-action-field="description" rows="3" required placeholder="State the action and evidence required for closure.">${escapeHtml(action.description || "")}</textarea></label>
+      ${input("Responsible person", "owner")}${input("Responsible person’s email", "email", "email")}${input("Action due date", "dueDate", "date")}
+      <label class="field"><span>Initial action status</span><input data-action-field="status" value="Open" readonly /></label>
+    </div>
+    <p>The assigned respondent can record replies in the report after this action is saved.</p>
+  </section>`;
+}
+
+function renderAuditActionTracking(entry) {
+  return `<section class="audit-action-tracking"><h4>Corrective action monitoring</h4>${auditActionsFor(entry).map((action, index) => {
+    const timing = auditActionTiming(action);
+    const followup = action.responseDueDate ? auditActionTiming({dueDate: action.responseDueDate, status: action.status}) : null;
+    return `<section class="audit-action-card audit-action-${timing.tone}">
+      <header><b>Action ${index + 1}</b><span class="audit-action-badge">${escapeHtml(timing.label)}</span></header>
+      <p class="multiline-text">${escapeHtml(action.description)}</p>
+      <div class="audit-response-row"><span><b>Responsible person</b>${escapeHtml(action.owner || "Unassigned")}</span><span><b>Email</b>${escapeHtml(action.email || "Not assigned")}</span><span><b>Action due date</b>${auditDateLabel(action.dueDate)}</span><span><b>Status</b>${escapeHtml(action.status || "Open")}</span></div>
+      ${auditPermission("recommend") ? `<details><summary>Edit corrective action / assignment</summary><form class="audit-update-action-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}"><div class="audit-action-grid">
+        <label class="field audit-action-description"><span>Corrective action</span><textarea name="description" required>${escapeHtml(action.description)}</textarea></label>
+        <label class="field"><span>Responsible person</span><input name="owner" value="${escapeHtml(action.owner || "")}" required /></label>
+        <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(action.email || "")}" required /></label>
+        <label class="field"><span>Action due date</span><input name="dueDate" type="date" value="${escapeHtml(action.dueDate || "")}" required /></label>
+      </div><button type="submit" class="secondary-button">Save action changes</button><span role="status"></span></form></details>` : ""}
+      <h4>Responses / replies</h4>
+      ${action.responseDueDate ? `<p class="audit-action-badge audit-action-${followup.tone}">Follow-up due: ${auditDateLabel(action.responseDueDate)} · ${escapeHtml(followup.label)}</p>` : ""}
+      ${(action.responses || []).map(reply => `<div class="audit-action-reply"><b>${escapeHtml(reply.author || "Recorded response")}</b><small>${escapeHtml(reply.email || "")} · ${escapeHtml(reply.createdAt || "")} · Follow-up due: ${auditDateLabel(reply.dueDate)}</small><p class="multiline-text">${escapeHtml(reply.text)}</p></div>`).join("") || "<p>No responses recorded.</p>"}
+      ${canReplyToAuditAction(action) ? `<form class="audit-action-reply-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}">
+        <div class="audit-action-grid">
+          <p>Replying as ${escapeHtml(state.currentSession.userId)}</p>
+
+          <label class="field"><span>Response / follow-up due date</span><input name="dueDate" type="date" value="${escapeHtml(action.responseDueDate || "")}" /></label>
+          <label class="field"><span>Action status</span><select name="status">${["Open", "In progress", "Closed"].map(status => `<option ${status === action.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
+          <label class="field audit-action-description"><span>Response / reply</span><textarea name="text" rows="2" required></textarea></label>
+        </div><button class="primary-button" type="submit">Save response</button><span role="status" class="audit-reply-status"></span>
+      </form>` : "<p>Replies are limited to the assigned respondent and administrators.</p>"}
+    </section>`;
+  }).join("")}
+  ${auditPermission("recommend") ? `<form class="audit-add-action-form" data-entry-id="${escapeHtml(entry.id)}"><h4>Add corrective action</h4><div class="audit-action-grid">
+  <label class="field audit-action-description"><span>Recommendation / corrective action</span><textarea name="description" required></textarea></label>
+  <label class="field"><span>Responsible person</span><input name="owner" required /></label>
+  <label class="field"><span>Responsible email</span><input name="email" type="email" required /></label>
+  <label class="field"><span>Action due date</span><input name="dueDate" type="date" required /></label>
+  </div><button class="primary-button" type="submit">Save corrective action</button><span role="status"></span></form>` : ""}</section>`;
+}
+
 function captureAuditDraftFields() {
   const valueFrom = (selector, fallback = "") => {
     const element = qs(selector);
     return element ? element.value : fallback;
   };
   state.auditDraftFields = {
+    actions: readAuditActionDrafts(),
     department: valueFrom("#auditDepartment", state.auditDraftFields.department || ""),
     area: valueFrom("#auditArea", state.auditDraftFields.area || ""),
     priority: valueFrom("#auditPriority", state.auditDraftFields.priority || ""),
@@ -3123,10 +3280,12 @@ function renderAuditEntry(entries) {
             <span>Impact</span>
             <textarea id="auditImpact" rows="3" placeholder="Describe operational, financial, safety, compliance, or quality impact.">${escapeHtml(draft.impact || "")}</textarea>
           </label>
-          <label class="field wide">
-            <span>Recommendation / Corrective action</span>
-            <textarea id="auditRecommendation" rows="3" placeholder="State corrective action, prevention control, and evidence required for closure.">${escapeHtml(draft.recommendation || "")}</textarea>
-          </label>
+          ${auditPermission("recommend") ? `<section class="audit-actions-editor">
+            <h4>Recommendation / Corrective actions</h4>
+            <p>Assign a responsible person, email and due date to each action. Record responses below each action.</p>
+            ${(draft.actions?.length ? draft.actions : [{id: crypto.randomUUID(), description: draft.recommendation || "", status: "Open"}]).map(renderAuditActionDraft).join("")}
+            <button type="button" class="secondary-button" id="addAuditAction">Add corrective action</button>
+          </section>` : '<p class="field wide">The corrective action author will add recommendations after this finding is saved.</p>'}
         </div>
         <div class="audit-evidence-grid">
           <section class="audit-evidence-card">
@@ -3321,6 +3480,7 @@ function renderAuditReport(entries) {
                       <span><b>Timeline</b>${auditDateLabel(entry.dueDate)}</span>
                       <span><b>Status</b><em class="risk ${auditStatusClass(entry.status)}">${escapeHtml(entry.status || "Open")}</em></span>
                     </div>
+                    ${renderAuditActionTracking(entry)}
                     <div class="audit-evidence-row">
                       ${entry.photoDataUrl || entry.photoUrl ? `<img src="${escapeHtml(entry.photoDataUrl || entry.photoUrl)}" alt="Audit evidence" />` : `<div class="audit-photo-token">${escapeHtml(entry.photoName || "Evidence pending")}</div>`}
                       <span>${escapeHtml(entry.location || "Location pending")}</span>
@@ -3602,6 +3762,41 @@ async function handleAuditPhotoSelection(event, sourceType) {
 }
 
 function bindAuditEvents() {
+  document.querySelectorAll(".audit-add-action-form, .audit-update-action-form").forEach(form => form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = form.querySelector("button");
+    button.disabled = true;
+    try {
+      await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`, {method: "POST", body: JSON.stringify({id: form.dataset.entryId, operation: form.dataset.actionId ? "update-action" : "add-action", actionId: form.dataset.actionId, action: Object.fromEntries(new FormData(form))})});
+      renderAudit();
+    } catch (error) { form.querySelector('[role="status"]').textContent = error.message; button.disabled = false; }
+  }));
+  bindClick("#addAuditAction", () => {
+    captureAuditDraftFields();
+    state.auditDraftFields.actions.push({id: crypto.randomUUID(), status: "Open"});
+    renderAudit();
+  });
+  document.querySelectorAll("[data-remove-audit-action]").forEach(button => button.addEventListener("click", () => {
+    const id = button.closest("[data-audit-action-draft]").dataset.auditActionDraft;
+    captureAuditDraftFields();
+    state.auditDraftFields.actions = state.auditDraftFields.actions.filter(action => action.id !== id);
+    renderAudit();
+  }));
+  document.querySelectorAll(".audit-action-reply-form").forEach(form => form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const feedback = form.querySelector(".audit-reply-status");
+    const button = form.querySelector("button");
+    const values = Object.fromEntries(new FormData(form));
+    if (!values.text.trim()) { feedback.textContent = "Enter a respondent and response."; return; }
+    const entry = state.auditEntries.find(item => item.id === form.dataset.entryId);
+    if (!entry) return;
+    button.disabled = true;
+    try {
+      await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id: entry.id, operation: "reply", actionId: form.dataset.actionId, ...values})});
+      renderAudit();
+    } catch (error) { feedback.textContent = error.message || "Response could not be saved."; button.disabled = false; }
+  }));
+
   qsa("#auditTabs button").forEach((button) => {
     button.classList.toggle("active", button.dataset.auditPanel === state.selectedAuditPanel);
     button.addEventListener("click", () => {
@@ -3683,7 +3878,15 @@ function bindAuditEvents() {
       if (status) status.textContent = "Observation / Finding is required before saving.";
       return;
     }
+    const actionInputs = Array.from(document.querySelectorAll("[data-audit-action-draft] input, [data-audit-action-draft] textarea"));
+    if (actionInputs.some(input => !input.reportValidity())) return;
+    const actions = readAuditActionDrafts();
+    if (actions.some(action => !action.description || !action.owner || !action.email || !action.dueDate)) {
+      if (status) status.textContent = "Complete the corrective action, responsible person, email and due date for each action.";
+      return;
+    }
     const entry = {
+      actions: actions.map(({response, ...action}) => ({...action, responses: response ? [{id: crypto.randomUUID(), text: response, author: action.owner, email: action.email, dueDate: action.responseDueDate, createdAt: new Date().toISOString()}] : []})),
       id: `audit_${Date.now()}`,
       auditYear: qs("#auditEntryYear")?.value || state.auditYear,
       entity: auditEntityValue(),
@@ -3702,7 +3905,7 @@ function bindAuditEvents() {
         description: item.description || "",
       })),
       impact: qs("#auditImpact")?.value.trim() || "Impact pending review.",
-      recommendation: qs("#auditRecommendation")?.value.trim() || "Corrective action pending assignment.",
+      recommendation: actions.map(action => action.description).join("\n\n") || "Corrective action pending assignment.",
       geo: state.auditDraftGeo,
       photoDataUrl: state.auditDraftImage,
       photoName: state.auditDraftImageName,
@@ -3759,6 +3962,7 @@ async function renderAudit() {
     </article>
   `;
   const entries = await loadAuditEntries();
+  if (!auditPermission("create")) state.selectedAuditPanel = "report";
   workspace.innerHTML = `
     ${renderAuditEntityCard(entries)}
     ${state.selectedAuditPanel === "report" ? renderAuditReport(entries) : renderAuditEntry(entries)}
@@ -4020,6 +4224,7 @@ async function loadLocalCpoOverviewPanel(refreshed = false) {
 function bindNavigation() {
   qsa(".module").forEach((button) => {
     button.addEventListener("click", () => {
+      if (state.currentSession?.role === "audit" && button.dataset.view !== "audit") return;
       qsa(".module").forEach((item) => item.classList.remove("active"));
       qsa(".view").forEach((item) => item.classList.remove("active"));
       button.classList.add("active");
@@ -4038,14 +4243,33 @@ function bindNavigation() {
 }
 
 async function init() {
-  const [session, analysis, projectData] = await Promise.all([
-    requestJson("/api/session", { credentials: "same-origin" }),
+  const session = await requestJson("/api/session", {credentials: "same-origin"});
+  state.currentSession = session;
+  if (session?.role === "audit") {
+    state.projectData = await requestJson(`/api/projects/${PROJECT_ID}/audit-context`);
+    const access = await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
+    state.auditIdentity = access.identity;
+    state.auditUsers = [];
+    state.selectedAuditPanel = access.identity.create ? "entry" : "report";
+    qsa('.module:not([data-view="audit"]), .view:not(#audit), .market-strip, .sidebar-card').forEach(element => element.remove());
+    qs('[data-view="audit"]')?.classList.add("active");
+    qs("#audit")?.classList.add("active");
+    applyBrandingLogo();
+    applySessionUi();
+    bindNavigation();
+    await renderAudit();
+    return;
+  }
+  const [analysis, projectData] = await Promise.all([
     requestJson("./public/workbook-analysis.json"),
     requestJson(`/api/projects/${PROJECT_ID}`),
   ]);
   state.currentSession = session;
   state.analysis = analysis;
   state.projectData = projectData;
+  const access = await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
+  state.auditIdentity = access.identity;
+  state.auditUsers = access.users || [];
   applyBrandingLogo();
   applySessionUi();
   renderMetrics();

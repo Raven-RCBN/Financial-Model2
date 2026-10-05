@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Audit Workspace</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="./public/agrinexus-favicon-32.png?v=6" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./public/apple-touch-icon.png?v=6" />
+    <link rel="stylesheet" href="./styles.css?v=26" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <img class="brand-logo" id="brandLogo" src="./public/agrinexus-logo.jpeg?v=4" alt="Agrinexus Intel logo" />
+          <div>
+            <span>Unified Advisory Product</span>
+            <h1>Audit Workspace</h1>
+          </div>
+        </div>
+        <div class="tenant-controls" aria-label="User session controls">
+          <label>
+            Language
+            <select>
+              <option>English</option>
+              <option>Malay</option>
+            </select>
+          </label>
+          <label>
+            User
+            <input id="sessionUser" value="" readonly />
+          </label>
+          <label>
+            Tenant
+            <select>
+              <option>Agrilntel portfolio</option>
+              <option>Audit</option>
+            </select>
+          </label>
+          <a class="logout-link" href="/logout" title="Sign out">Logout</a>
+        </div>
+      </header>
+
+      
+
+      <main class="workspace">
+        <aside class="sidebar">
+          
+          
+          
+          
+          <button class="module active" data-view="audit"><span class="mini-icon">au</span> Audit</button>
+          
+        </aside>
+
+        <section class="content">
+          
+
+          
+
+          
+
+          
+
+          <section class="view active" id="audit">
+            <div class="page-head compact audit-head">
+              <div>
+                <span class="eyebrow">Audit Module</span>
+                <h2>Field audit capture and report</h2>
+                <p>Mobile-ready audit data entry with evidence capture, GPS tagging, action owners, and an OBAN-style report preview.</p>
+              </div>
+              <div class="audit-tabs" id="auditTabs" aria-label="Audit sections">
+                <button class="active" data-audit-panel="entry">Data Entry</button>
+                <button data-audit-panel="report">Report</button>
+              </div>
+            </div>
+            <div id="auditWorkspace"></div>
+          </section>
+
+          
+        </section>
+      </main>
+    </div>
+    <script src="./app.js?v=audits-25"></script>
+  </body>
+</html>
