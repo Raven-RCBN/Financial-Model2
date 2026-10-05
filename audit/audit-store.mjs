@@ -467,14 +467,15 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
       })) : [],
     })) : [],
     observationImages,
-    impact: String(entry.impact || "Impact pending review."),
-    recommendation: String(entry.recommendation || "Corrective action pending assignment."),
+    impact: String(entry.impact || (entry.sourceReport ? "" : "Impact pending review.")),
+    recommendation: String(entry.recommendation || (entry.sourceReport ? "" : "Corrective action pending assignment.")),
     geo: geo && Number.isFinite(geo.latitude) && Number.isFinite(geo.longitude) ? geo : null,
     photoDataUrl: typeof entry.photoDataUrl === "string" && entry.photoDataUrl.startsWith("data:image/") ? entry.photoDataUrl : "",
     photoUrl: typeof entry.photoUrl === "string" && entry.photoUrl.startsWith("/") ? entry.photoUrl : "",
     photoName: String(entry.photoName || ""),
     source: String(entry.source || "Field entry"),
-    capturedAt: String(entry.capturedAt || now),
+    sourceReport: entry.sourceReport && typeof entry.sourceReport === "object" ? structuredClone(entry.sourceReport) : null,
+    capturedAt: entry.sourceReport ? String(entry.capturedAt || "") : String(entry.capturedAt || now),
     updatedAt: String(entry.updatedAt || now),
   };
 }
@@ -533,6 +534,7 @@ async function writeFallbackEntries(dbPath, projectId, entries) {
 }
 
 export async function seedAuditEntries(dbPath, projectId, auditYear = "") {
+  if (process.env.AUDIT_DISABLE_SEED === "1") return {backend: "json", seeded: 0};
   const seedSource = [
     ...auditSeedEntries2025,
     ...auditSeedEntries2024,

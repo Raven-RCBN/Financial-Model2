@@ -2,7 +2,7 @@ export const PROJECT='project_opsl_15000ha_development';
 export const FINDING_FIELDS=['finding','impact','department','area','priority','location','reference','auditYear'];
 export const ACTION_FIELDS=['description','owner','email','dueDate'];
 export const snapshot=(obj,keys)=>Object.fromEntries(keys.map(key=>[key,String(obj?.[key]||'')]));
-export const actionsFor=entry=>entry.actions?.length?entry.actions:(!entry.recommendation||entry.recommendation==='Corrective action pending assignment.'?[]:[{id:'legacy',description:entry.recommendation,owner:entry.owner||'',email:'',dueDate:entry.dueDate||'',status:entry.status||'Open',responses:[]}]);
+export const actionsFor=entry=>entry.sourceReport?(entry.actions||[]):entry.actions?.length?entry.actions:(!entry.recommendation||entry.recommendation==='Corrective action pending assignment.'?[]:[{id:'legacy',description:entry.recommendation,owner:entry.owner||'',email:'',dueDate:entry.dueDate||'',status:entry.status||'Open',responses:[]}]);
 export function applyLocal(entries,op,user){
  const next=structuredClone(entries),p=op.patch;let entry=next.find(e=>e.id===p.id);
  if(!p.operation){if(!entry)next.unshift({...p,createdBy:user,actions:p.actions||[],status:'Open',capturedAt:new Date().toISOString()});return next;}

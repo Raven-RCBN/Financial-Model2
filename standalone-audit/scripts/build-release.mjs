@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const out=path.resolve(process.argv[2]||path.join(repo,'outputs/audit-release'));
 await fs.mkdir(out,{recursive:false});
-for(const name of ['server.mjs','login-page.mjs','app.js','styles.css','index.html'])await fs.copyFile(path.join(repo,'standalone-audit',name),path.join(out,name));
+for(const name of ['server.mjs','login-page.mjs','report-data.mjs','render_source_report.py','app.js','styles.css','index.html'])await fs.copyFile(path.join(repo,'standalone-audit',name),path.join(out,name));
 let server=await fs.readFile(path.join(out,'server.mjs'),'utf8');server=server.replaceAll("'../audit/","'./audit/");await fs.writeFile(path.join(out,'server.mjs'),server);
 for(const name of ['audit-permissions.mjs','audit-store.mjs','mobile-sync.mjs','render_audit_pdf.py']){await fs.mkdir(path.join(out,'audit'),{recursive:true});await fs.copyFile(path.join(repo,'audit',name),path.join(out,'audit',name));}
 // Standalone store must never inherit FM2's Mongo configuration.
@@ -16,7 +16,7 @@ for(const dir of ['audit/evidence','audit/source-reports','mobile/web'])await fs
 await fs.mkdir(path.join(out,'public'));for(const name of await fs.readdir(path.join(repo,'public')))if(/^[\w.-]+\.(png|jpe?g|webp|svg)$/i.test(name))await fs.copyFile(path.join(repo,'public',name),path.join(out,'public',name));
 await fs.cp(path.join(repo,'standalone-audit/deploy'),path.join(out,'deploy'),{recursive:true});
 await fs.cp(path.join(repo,'standalone-audit/scripts'),path.join(out,'scripts'),{recursive:true});
-const init=path.join(out,'scripts/init-instance.mjs');await fs.writeFile(init,(await fs.readFile(init,'utf8')).replace("'../../audit/","'../audit/"));
+for(const name of ['init-instance.mjs','import-source-reports.mjs']){const file=path.join(out,'scripts',name);await fs.writeFile(file,(await fs.readFile(file,'utf8')).replaceAll("'../../audit/","'../audit/"));}
 await fs.writeFile(path.join(out,'package.json'),JSON.stringify({name:'agintel-standalone-audit',version:'0.2.0',private:true,type:'module',scripts:{start:'node server.mjs'},engines:{node:'>=20'}},null,2)+'\n');
 await fs.copyFile(path.join(repo,'standalone-audit/deploy/start.sh'),path.join(out,'start.sh'));
 await fs.chmod(path.join(out,'start.sh'),0o755);

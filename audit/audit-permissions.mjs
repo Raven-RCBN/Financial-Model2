@@ -15,6 +15,7 @@ export function validateAction(action) {
   if (action.responseDueDate && !validDate(action.responseDueDate)) reject("Invalid follow-up due date.", 400);
 }
 export function actionsFor(entry) {
+  if (entry.sourceReport) return entry.actions || [];
   if (entry.actions?.length) return entry.actions;
   if (!entry.recommendation || entry.recommendation === "Corrective action pending assignment.") return [];
   return [{id: "legacy", description: entry.recommendation, owner: entry.owner || "", email: "", dueDate: entry.dueDate || "", status: entry.status || "Open", responses: []}];

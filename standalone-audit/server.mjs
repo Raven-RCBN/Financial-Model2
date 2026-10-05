@@ -1,3 +1,5 @@
+import {importSourceReports} from './scripts/import-source-reports.mjs';
+import {auditCompanies,selectedCompany,companyEntries,reportListing} from './report-data.mjs';
 import {loginPage} from './login-page.mjs';
 import http from 'node:http';
 import crypto from 'node:crypto';
@@ -12,6 +14,7 @@ import {prepareMobileWrite} from '../audit/mobile-sync.mjs';
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const assetRoot=existsSync(path.join(__dirname,'audit'))?__dirname:path.dirname(__dirname);
+process.env.AUDIT_DISABLE_SEED='1';
 const dataDir=path.resolve(process.env.AUDIT_DATA_DIR || path.join(__dirname,'runtime'));
 const auditUsersPath=path.join(dataDir,'audit-users.json');
 const dbPath=path.join(dataDir,'audit-context.json');
@@ -71,7 +74,7 @@ async function handle(req,res){
   if(!entries.some(e=>e.photoUrl===url.pathname||e.observationImages?.some(i=>i.url===url.pathname)))return forbidden(req,res);
   return asset(req,res,path.join(assetRoot,url.pathname));
  }
- const match=url.pathname.match(/^\/api\/projects\/([^/]+)\/(audit-context|audit-access|audit-entries|audit-sync|audit-settings|audit-branding|audit-pdf)$/);
+ const match=url.pathname.match(/^\/api\/projects\/([^/]+)\/(audit-context|audit-access|audit-entries|audit-sync|audit-settings|audit-branding|audit-pdf|audit-source-report|audit-source-import)$/);
  if(!match||match[1]!==projectId)return notFound(req,res);
  const child=match[2],payload=context;
  const auditActor=auditIdentity(session,directories[projectId]||[]);
@@ -92,15 +95,37 @@ async function handle(req,res){
   const patch=await bodyJson(req);if(!String(patch.companyName||'').trim()||!String(patch.projectName||'').trim())fail('Company and project names are required.');
   if(!patch.auditSetup||['years','departments','areas'].some(key=>!Array.isArray(patch.auditSetup[key])||!patch.auditSetup[key].length||patch.auditSetup[key].some(v=>typeof v!=='string'||!v.trim())))fail('Provide report years, departments and audit areas.');
   if(patch.auditSetup.years.some(year=>!/^\d{4}$/.test(year)))fail('Report years must have four digits.');
-  context.company.name=patch.companyName.trim();context.project.name=patch.projectName.trim();context.project.settings={...context.project.settings,auditSetup:patch.auditSetup,auditReport:patch.auditReport||{}};
+  if(patch.auditCompanies!==undefined){if(!Array.isArray(patch.auditCompanies)||!patch.auditCompanies.length||patch.auditCompanies.some(c=>typeof c!=='string'||!c.trim()||c.length>200))fail('Provide company names, one per line.');const used=await allAuditEntries(dbPath,projectId);const allowed=new Set([patch.companyName.trim(),...patch.auditCompanies.map(c=>c.trim())]);if(used.some(e=>e.entity&&!allowed.has(e.entity)))fail('A company with existing findings cannot be removed.');}
+  context.company.name=patch.companyName.trim();context.project.name=patch.projectName.trim();context.project.settings={...context.project.settings,auditSetup:patch.auditSetup,auditReport:patch.auditReport||{},auditCompanies:patch.auditCompanies||auditCompanies(context)};
   await atomicJson(dbPath,context);return send(req,res,200,context);
+ }
+ if(child==='audit-source-import'){
+  if(!auditActor.admin)return forbidden(req,res);
+  if(req.method!=='POST')return notFound(req,res);
+  const patch=await bodyJson(req);if(!/^oban-report-import-[a-zA-Z0-9-]+$/.test(patch.packageName||''))return badRequest(req,res,'Invalid staged report package.');
+  return send(req,res,200,await importSourceReports(dataDir,path.join(path.dirname(dataDir),'releases',patch.packageName)));
+ }
+ if(child==='audit-source-report'){
+  if(req.method!=='GET')return notFound(req,res);
+  const year=url.searchParams.get('auditYear'),company=selectedCompany(context,url.searchParams.get('company'));
+  const report=context.project.settings?.auditSourceReports?.[year];
+  if(!/^\d{4}$/.test(year||'')||!report||report.companyName!==company)return notFound(req,res);
+  const file=path.join(dataDir,'reports',year,'original.pdf');const bytes=await fs.readFile(file);
+  if(crypto.createHash('sha256').update(bytes).digest('hex')!==report.sha256)throw new Error('Source report integrity check failed.');
+  res.setHeader('Content-Disposition',`inline; filename="oban-${year}-source.pdf"`);return send(req,res,200,bytes,'application/pdf');
  }
  if(child==='audit-pdf'){
   if(req.method!=='POST')return notFound(req,res);
   const patch=await bodyJson(req),year=String(patch.auditYear||'');
-  const entries=await allAuditEntries(dbPath,projectId,year);
-  const result=spawnSync(pythonPath,[path.join(assetRoot,'audit/render_audit_pdf.py'),dbPath,projectId],{input:JSON.stringify({entries,reportSettings:{...auditReportDefaults,...context.project.settings?.auditReport,...patch.reportSettings},brandingLogoUrl:context.project.settings?.brandingLogoUrl}),maxBuffer:40*1024*1024,env:{...process.env,AUDIT_UPLOAD_ROOT:auditUploadDir,AUDIT_BRAND_ROOT:path.join(dataDir,'branding')}});
-  if(result.status!==0)throw new Error('Audit PDF could not be generated. Check server PDF dependencies.');
+  const company=selectedCompany(context,patch.auditEntity||patch.company);
+  const entries=companyEntries(await allAuditEntries(dbPath,projectId,year),context,company);
+  if(!entries.length)return badRequest(req,res,'No findings for this company and report year.');
+  const report=context.project.settings?.auditSourceReports?.[year];
+  const imported=report?.companyName===company;
+  const reportSettings={...auditReportDefaults,...context.project.settings?.auditReport,...context.project.settings?.auditReportsByYear?.[year],...patch.reportSettings,auditClientName:company};
+  const script=path.join(__dirname,'render_source_report.py');
+  const result=spawnSync(pythonPath,[script,dbPath,projectId],{input:JSON.stringify({entries,reportSettings,auditEntity:company,sourceReport:imported?report:null,sourceDirectory:imported?path.join(dataDir,'reports',year):null,brandingLogoUrl:context.project.settings?.brandingLogoUrl}),maxBuffer:80*1024*1024,env:{...process.env,AUDIT_UPLOAD_ROOT:auditUploadDir,AUDIT_BRAND_ROOT:path.join(dataDir,'branding')}});
+  if(result.status!==0)throw new Error('Audit PDF could not be generated. Check report data and server PDF dependencies.');
   res.setHeader('Content-Disposition',`attachment; filename="audit-report-${year.replace(/[^0-9]/g,'')||'all'}.pdf"`);return send(req,res,200,result.stdout,'application/pdf');
  }
    let auditDirectories = directories;
@@ -108,7 +133,7 @@ async function handle(req,res){
 
   if (child === "audit-context" && req.method === "GET") {
     const settings = payload.project.settings || {};
-    return send(req, res, 200, {company: {name: payload.company.name}, project: {id: projectId, name: payload.project.name, settings: {auditSetup: settings.auditSetup, auditReport: settings.auditReport, brandingLogoUrl: settings.brandingLogoUrl}}}, "application/json; charset=utf-8", {cacheControl: "no-store"});
+    return send(req, res, 200, {company: {name: payload.company.name}, project: {id: projectId, name: payload.project.name, settings: {auditSetup: settings.auditSetup, auditReport: settings.auditReport, brandingLogoUrl: settings.brandingLogoUrl,auditCompanies:auditCompanies(context),auditSourceReports:settings.auditSourceReports,auditReportsByYear:settings.auditReportsByYear}}}, "application/json; charset=utf-8", {cacheControl: "no-store"});
   }
   if (child === "audit-access") {
     if (!auditActor.userId) return forbidden(req, res);
@@ -139,7 +164,10 @@ async function handle(req,res){
     try {
       const request = await bodyJson(req);
       const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === request.patch?.id);
+      if(!existing)selectedCompany(context,request.patch.entity);
+      if(existing?.sourceReport&&request.patch.operation==='update-finding')return forbidden(req,res,'Issued report observations are preserved. Add a new finding or corrective action instead.');
       const prepared = prepareMobileWrite(auditActor, request, existing);
+      if(!existing){prepared.entry.entity=selectedCompany(context,request.patch.entity);delete prepared.entry.sourceReport;}
       if (prepared.duplicate) return send(req,res,200,{entry:prepared.entry,duplicate:true},"application/json; charset=utf-8",{cacheControl:"no-store"});
       validateAuditAssignees(request.patch, auditUsers, [{userId:admin.name}].map(user => user.userId));
       const persisted = await persistAuditEntryImages(projectId, prepared.entry);
@@ -153,19 +181,13 @@ async function handle(req,res){
   if (child === "audit-entries") {
     if (!session) return forbidden(req, res, "Audit access requires a signed-in user.");
     if (req.method === "GET") {
-      return send(req, res, 200, await listAuditEntries(dbPath, projectId, {
-        page: url.searchParams.get("page"),
-        pageSize: url.searchParams.get("pageSize"),
-        q: url.searchParams.get("q") || "",
-        department: url.searchParams.get("department") || "",
-        status: url.searchParams.get("status") || "",
-        auditYear: url.searchParams.get("auditYear") || "",
-      }), "application/json; charset=utf-8", { cacheControl: "no-store" });
+      return send(req,res,200,reportListing(await allAuditEntries(dbPath,projectId),context,url.searchParams));
     }
     if (req.method === "POST") {
       try {
         const patch = await bodyJson(req);
         const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === patch.id);
+        if(!existing){patch.entity=selectedCompany(context,patch.entity);delete patch.sourceReport;}
         validateAuditAssignees(patch, auditUsers, [{userId:admin.name}].map(user => user.userId));
         const authorized = applyAuditWrite(auditActor, patch, existing);
         const persistedPatch = await persistAuditEntryImages(projectId, authorized);
@@ -243,5 +265,6 @@ const server=http.createServer((req,res)=>{
  const pending=queue.then(()=>handle(req,res));queue=pending.catch(()=>{});
  pending.catch(error=>{if(!res.headersSent)send(req,res,error.statusCode||500,{message:error.statusCode?error.message:'Audit service error. Please retry or contact the administrator.'});else res.end();console.error(error.statusCode||500,error.message);});
 });
+if(existsSync(path.join(dataDir,'report-import.pending.json')))throw new Error('Incomplete report import; restore its private backup before starting.');
 await Promise.all(['audit-context.json','audit-users.json','audit-entries.json','admin-user.json'].map(file=>readJson(path.join(dataDir,file))));
 server.listen(port,'127.0.0.1',()=>console.log(`Standalone Audit listening on 127.0.0.1:${port}`));

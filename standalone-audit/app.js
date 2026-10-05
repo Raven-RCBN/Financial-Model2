@@ -8,6 +8,7 @@ auditEntries: null,
 auditPage: 1,
 auditPageSize: 5,
 auditTotal: 0,
+auditSummaryData: null,
 auditYearCounts: {},
 auditBackend: "",
 auditLoading: false,
@@ -208,9 +209,11 @@ function auditAreas() {
 
 function auditReportSettings(year = state.auditYear || "2025") {
   const yearKey = String(year);
+  const saved=projectSettings().auditReportsByYear?.[yearKey];
+  if(saved && sourceReportForSelection())return {...saved,auditClientName:auditEntityValue()};
   const base = AUDIT_REPORT_DEFAULTS_BY_YEAR[yearKey] || AUDIT_REPORT_DEFAULTS;
   const custom = projectSettings().auditReport || {};
-  if (yearKey === "2025") return { ...base, ...custom };
+  if (yearKey === "2025") return { ...base, ...custom,auditClientName:auditEntityValue() };
   const fallbackTitle = AUDIT_REPORT_DEFAULTS_BY_YEAR[yearKey]?.auditReportTitle || `${yearKey} Internal Audit Report`;
   const customTitle = custom.auditReportTitle && custom.auditReportTitle !== AUDIT_REPORT_DEFAULTS.auditReportTitle
     ? custom.auditReportTitle
@@ -218,7 +221,7 @@ function auditReportSettings(year = state.auditYear || "2025") {
   return {
     ...base,
     auditReportTitle: customTitle,
-    auditClientName: custom.auditClientName || base.auditClientName,
+    auditClientName: auditEntityValue(),
     auditLocation: custom.auditLocation || base.auditLocation,
     auditPreparedBy: custom.auditPreparedBy || base.auditPreparedBy,
     auditConfidentiality: custom.auditConfidentiality || base.auditConfidentiality,
@@ -416,6 +419,7 @@ async function loadAuditEntries() {
     page: String(state.auditPage),
     pageSize: String(state.auditPageSize),
     auditYear: String(state.auditYear),
+    company: auditEntityValue(),
   });
   if (state.auditSearch.trim()) params.set("q", state.auditSearch.trim());
   try {
@@ -424,6 +428,7 @@ async function loadAuditEntries() {
     });
     state.auditEntries = Array.isArray(result.items) ? result.items : [];
     state.auditTotal = Number(result.total || state.auditEntries.length);
+    state.auditSummaryData = result.summary || null;
     state.auditYearCounts = result.yearCounts && typeof result.yearCounts === "object" ? result.yearCounts : {};
     state.auditPage = Number(result.page || state.auditPage);
     state.auditPageSize = Number(result.pageSize || state.auditPageSize);
@@ -480,6 +485,7 @@ function auditDateLabel(value) {
 }
 
 function auditSummary(entries) {
+  if(state.auditSummaryData){const s=state.auditSummaryData;return [['Audit issues',String(s.total),'All matching records'],['High priority',String(s.high),'Critical and high risk'],['Departments',String(s.departments.length),'All matching records'],['Evidence',String(s.evidence),'Source report or photos'],['Open actions',String(s.openActions),'Assigned follow-up actions']];}
   const departments = new Set(entries.map((entry) => entry.department).filter(Boolean));
   const highCount = entries.filter((entry) => ["critical", "high"].includes(String(entry.priority).toLowerCase())).length;
   const evidenceCount = entries.filter((entry) => entry.photoDataUrl || entry.photoUrl || entry.photoName || entry.observationImages?.length).length;
@@ -494,6 +500,7 @@ function auditSummary(entries) {
 }
 
 function auditDepartmentRows(entries) {
+  if(state.auditSummaryData)return state.auditSummaryData.departments;
   const groups = entries.reduce((result, entry) => {
     const key = entry.department || "Unassigned";
     result[key] ||= { total: 0, high: 0, medium: 0, low: 0, open: 0 };
@@ -521,38 +528,20 @@ function auditYearHasReport(year) {
   return Number(state.auditYearCounts?.[String(year)] || 0) > 0;
 }
 
-function auditEntityValue(entries = []) {
-  if (state.auditEntity.trim()) return state.auditEntity.trim();
-  try {
-    const stored = localStorage.getItem(AUDIT_ENTITY_STORAGE_KEY);
-    if (stored && stored.trim()) {
-      state.auditEntity = stored.trim();
-      return state.auditEntity;
-    }
-  } catch {}
-  const fromEntries = entries.find((entry) => entry.entity || entry.companyName);
-  const value = fromEntries?.entity || fromEntries?.companyName || state.projectData?.company?.name || "";
-  state.auditEntity = value;
-  return value;
+function auditCompanyNames(){return projectSettings().auditCompanies || [state.projectData?.company?.name].filter(Boolean);}
+function auditEntityValue(){
+  const companies=auditCompanyNames();
+  if(!companies.includes(state.auditEntity))state.auditEntity=state.projectData?.company?.name || companies[0] || '';
+  return state.auditEntity;
 }
-
-function updateAuditEntity(value) {
-  state.auditEntity = String(value || "").trim();
-  try {
-    localStorage.setItem(AUDIT_ENTITY_STORAGE_KEY, state.auditEntity);
-  } catch {}
-}
-
-function renderAuditEntityCard(entries) {
-  return `
-    <article class="panel audit-context-panel">
-      <label class="field">
-        <span>Company / estate</span>
-        <input id="auditEntity" value="${escapeHtml(auditEntityValue(entries))}" placeholder="Company or estate audited" />
-      </label>
-      <p>Key in once for this audit year. Each finding entered below will use this company or estate.</p>
-    </article>
-  `;
+function updateAuditEntity(value){state.auditEntity=auditCompanyNames().includes(value)?value:state.projectData.company.name;}
+function renderAuditEntityCard(){return `<article class="panel audit-context-panel"><label class="field"><span>Company / estate</span><select id="auditEntity">${auditCompanyNames().map(name=>`<option value="${escapeHtml(name)}" ${name===auditEntityValue()?'selected':''}>${escapeHtml(name)}</option>`).join('')}</select></label><p>Data entry and reports use this company. Administrators can add companies in Audit management.</p></article>`;}
+function sourceReportForSelection(){const report=projectSettings().auditSourceReports?.[state.auditYear];return report?.companyName===auditEntityValue()?report:null;}
+function sourceReportUrl(page){return `/api/projects/${PROJECT_ID}/audit-source-report?auditYear=${encodeURIComponent(state.auditYear)}&company=${encodeURIComponent(auditEntityValue())}${page?'#page='+page:''}`;}
+function renderSourceDetails(entry){
+ if(!entry.sourceReport)return '';
+ const r=entry.sourceReport;
+ return `<section class="audit-source-details"><p><a href="${escapeHtml(sourceReportUrl(r.pages[0]))}" target="_blank" rel="noopener">View original report, pages ${r.pages[0]}–${r.pages.at(-1)}</a></p><div><b>Management response in the issued report</b><p class="multiline-text">${escapeHtml(r.managementResponse||'No response recorded in the source report.')}</p></div><p><b>Source timeline:</b> ${escapeHtml(r.timeline||'Not specified')}</p>${r.tables?.length?`<details><summary>Source tables (${r.tables.length})</summary>${r.tables.map(t=>`<p>Source page ${t.page}</p><div class="audit-table-scroll"><table class="audit-table"><tbody>${t.rows.map(row=>`<tr>${row.map(cell=>`<td class="multiline-text">${escapeHtml(cell||'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`).join('')}</details>`:''}</section>`;
 }
 
 function auditActionTiming(action) {
@@ -567,6 +556,7 @@ function auditActionTiming(action) {
 }
 
 function auditActionsFor(entry) {
+  if(entry.sourceReport)return entry.actions||[];
   if (!entry.actions?.length && (!entry.recommendation || entry.recommendation === "Corrective action pending assignment.")) return [];
   return entry.actions?.length ? entry.actions : [{ id: "legacy", description: entry.recommendation || "", owner: entry.owner || "", email: "", dueDate: entry.dueDate || "", status: entry.status || "Open", responses: [] }];
 }
@@ -851,7 +841,7 @@ function renderAuditReport(entries) {
         <header>
           <div>
             <span class="eyebrow">Report</span>
-            <h3>OBAN internal audit report - ${escapeHtml(state.auditYear)}</h3>
+            <h3>${escapeHtml(auditEntityValue())} — Audit report ${escapeHtml(state.auditYear)}</h3>
           </div>
           <div class="input-actions">
             <button class="action-icon edit" id="printAuditReport" title="Print or save report" aria-label="Print or save report">
@@ -886,6 +876,7 @@ function renderAuditReport(entries) {
           </div>
         </div>
         <div class="audit-report-page" id="auditReportPage">
+          ${sourceReportForSelection()?`<section class="audit-source-preview"><h3>Issued report · original layout</h3><p>${sourceReportForSelection().pageCount} pages · ${sourceReportForSelection().issueCount} audit sections. Download includes the complete report and any subsequent actions or findings as an appendix. <a href="${escapeHtml(sourceReportUrl())}" target="_blank" rel="noopener">Open original report</a></p><iframe title="Original ${escapeHtml(state.auditYear)} OBAN audit report" src="${escapeHtml(sourceReportUrl())}" loading="lazy"></iframe></section>`:''}
           <div class="audit-report-cover">
             <img class="brand-logo" src="${escapeHtml(brandLogoUrl())}" alt="Agrinexus logo" />
             <div>
@@ -933,7 +924,7 @@ function renderAuditReport(entries) {
                 <article class="audit-finding-card">
                   <header>
                     <div>
-                      <span>Audit Issue ${index + 1}: ${escapeHtml(entry.department)}</span>
+                      <span>Audit Issue ${entry.sourceReport?.issue || ((state.auditPage-1)*state.auditPageSize+index+1)}: ${escapeHtml(entry.department)}</span>
                       <h5>${escapeHtml(entry.area || "Audit observation")}</h5>
                     </div>
                     <b class="risk ${auditPriorityClass(entry.priority)}">${escapeHtml(entry.priority)}</b>
@@ -941,14 +932,15 @@ function renderAuditReport(entries) {
                   <div class="audit-finding-body">
                     <div><b>Observations / Findings</b><span class="multiline-text">${escapeHtml(entry.finding)}</span></div>
                     ${renderAuditObservationImages(entry.observationImages)}
-                    <div><b>Impact</b><span class="multiline-text">${escapeHtml(entry.impact)}</span></div>
-                    <div><b>Recommendation</b><span class="multiline-text">${escapeHtml(entry.recommendation)}</span></div>
+                    <div><b>Impact</b><span class="multiline-text">${escapeHtml(entry.impact||'Not separately specified in the source report.')}</span></div>
+                    <div><b>Recommendation</b><span class="multiline-text">${escapeHtml(entry.sourceReport?.originalRecommendation||entry.recommendation||'Not separately specified in the source report.')}</span></div>
                     <div class="audit-response-row">
                       <span><b>Entity / Company</b>${escapeHtml(entry.entity || entry.companyName || reportEntity || "-")}</span>
                       <span><b>Owner</b>${escapeHtml(entry.owner || "-")}</span>
                       <span><b>Timeline</b>${auditDateLabel(entry.dueDate)}</span>
                       <span><b>Status</b><em class="risk ${auditStatusClass(entry.status)}">${escapeHtml(entry.status || "Open")}</em></span>
                     </div>
+                    ${renderSourceDetails(entry)}
                     ${renderAuditActionTracking(entry)}
                     <div class="audit-evidence-row">
                       ${entry.photoDataUrl || entry.photoUrl ? `<img src="${escapeHtml(entry.photoDataUrl || entry.photoUrl)}" alt="Audit evidence" />` : `<div class="audit-photo-token">${escapeHtml(entry.photoName || "Evidence pending")}</div>`}
@@ -961,7 +953,7 @@ function renderAuditReport(entries) {
               `).join("")}
             </div>
           </section>
-          <footer>Produced by Agrinexus Intelligence - Public-source and field-entry data, for management review only</footer>
+          <footer>Agrinexus International · Source report records and subsequent field updates · Private &amp; Confidential</footer>
         </div>
       </article>
     </div>
@@ -1182,7 +1174,8 @@ function captureAuditCameraPhoto() {
   setTimeout(() => captureAuditGeoInBackground(), 0);
 }
 
-async function downloadAuditPdf() {
+async function downloadAuditPdf(printReport = false) {
+  const printWindow=printReport?window.open("about:blank","_blank"):null;
   const button = qs("#downloadAuditReport");
   const previousLabel = button?.getAttribute("aria-label") || "Download audit report PDF";
   if (button) {
@@ -1205,9 +1198,9 @@ async function downloadAuditPdf() {
     const blob = await response.blob();
     const issueDate = auditReportSettings().auditIssueDate || new Date().toISOString().slice(0, 10);
     const fallbackName = `oban-audit-report-${issueDate}.pdf`;
-    downloadBlob(filenameFromDisposition(response.headers.get("Content-Disposition"), fallbackName), blob);
+    if(printWindow){const pdfUrl=URL.createObjectURL(blob);printWindow.location.href=pdfUrl;setTimeout(()=>URL.revokeObjectURL(pdfUrl),120000);}else downloadBlob(filenameFromDisposition(response.headers.get("Content-Disposition"), fallbackName), blob);
   } catch (error) {
-    window.alert(error.message || "Audit PDF could not be generated.");
+    printWindow?.close();window.alert(error.message || "Audit PDF could not be generated.");
   } finally {
     if (button) {
       button.setAttribute("aria-label", previousLabel);
@@ -1312,8 +1305,7 @@ function bindAuditEvents() {
     state.auditPage = 1;
     renderAudit();
   });
-  bindEvent("#auditEntity", "input", (event) => updateAuditEntity(event.target.value));
-  bindEvent("#auditEntity", "change", (event) => updateAuditEntity(event.target.value));
+  bindEvent("#auditEntity", "change", async event => {if(state.selectedAuditPanel==='entry')captureAuditDraftFields();updateAuditEntity(event.target.value);state.auditPage=1;state.auditSearch='';await renderAudit();});
   bindEvent("#auditReportYear", "change", (event) => {
     state.auditYear = event.target.value || "2025";
     state.auditPage = 1;
@@ -1408,8 +1400,8 @@ function bindAuditEvents() {
     renderAudit();
   });
 
-  bindClick("#printAuditReport", () => window.print());
-  bindClick("#downloadAuditReport", downloadAuditPdf);
+  bindClick("#printAuditReport", () => downloadAuditPdf(true));
+  bindClick("#downloadAuditReport", () => downloadAuditPdf(false));
 }
 
 async function renderAudit() {
@@ -1487,6 +1479,7 @@ function renderStandaloneAdmin(){
                       </form>
                     </article>
   <form id="auditBrandForm" class="panel"><h3>Audit branding</h3><label class="field"><span>Company logo (PNG, JPG or WebP, up to 3 MB)</span><input id="auditBrandFile" type="file" accept="image/png,image/jpeg,image/webp" required></label><button class="primary-button">Save logo</button><p id="brandStatus" role="status"></p></form><form id="auditSettingsForm" class="panel"><h3>Company &amp; project</h3><div class="audit-action-grid">${field('companyName','Company',state.projectData.company.name)}${field('projectName','Project',state.projectData.project.name)}</div>
+  <label class="field"><span>Available companies (one per line)</span><textarea name="auditCompanies">${escapeHtml(auditCompanyNames().join('\n'))}</textarea></label>
   <h3>Audit setup</h3><div class="audit-action-grid">${[['years','Report years'],['departments','Departments'],['areas','Audit areas']].map(([key,label])=>`<label class="field"><span>${label} (one per line)</span><textarea name="${key}">${escapeHtml(setup[key].join('\n'))}</textarea></label>`).join('')}</div>
   <h3>Report settings</h3><div class="audit-action-grid">${Object.entries(report).map(([key,value])=>field(key,key.replace(/^audit/,'').replace(/([A-Z])/g,' $1').trim(),value)).join('')}</div>
   <button class="primary-button">Save Audit settings</button><p id="settingsStatus" role="status"></p></form>`;
@@ -1496,7 +1489,7 @@ function renderStandaloneAdmin(){
     event.preventDefault();const values=Object.fromEntries(new FormData(event.target));
     const auditSetup=Object.fromEntries(['years','departments','areas'].map(key=>[key,values[key].split('\n').map(x=>x.trim()).filter(Boolean)]));
     const auditReport=Object.fromEntries(Object.keys(report).map(key=>[key,values[key]]));
-    try{state.projectData=await requestJson(`/api/projects/${PROJECT_ID}/audit-settings`,{method:'PUT',body:JSON.stringify({companyName:values.companyName,projectName:values.projectName,auditSetup,auditReport})});qs('#settingsStatus').textContent='Audit settings saved.';}catch(error){qs('#settingsStatus').textContent=error.message;}
+    try{state.projectData=await requestJson(`/api/projects/${PROJECT_ID}/audit-settings`,{method:'PUT',body:JSON.stringify({companyName:values.companyName,projectName:values.projectName,auditSetup,auditReport,auditCompanies:values.auditCompanies.split('\n').map(v=>v.trim()).filter(Boolean)})});qs('#settingsStatus').textContent='Audit settings saved.';}catch(error){qs('#settingsStatus').textContent=error.message;}
   };
 }
 async function init(){

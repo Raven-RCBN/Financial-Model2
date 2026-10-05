@@ -1,5 +1,5 @@
 // Browser preview caches only this public shell; all private audit data remains account-scoped in IndexedDB.
-const CACHE='agintel-audit-shell-v1';
+const CACHE='agintel-audit-reports-shell-v1';
 const FILES=['index.html','app.js','styles.css','core.mjs','manifest.json'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES.map(file=>new URL(file,self.registration.scope).href)))));
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
