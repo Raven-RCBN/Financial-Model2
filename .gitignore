@@ -56,3 +56,7 @@ data/audit-users.json
 /mobile/android/.kotlin/
 *.apk
 *.jks
+
+# Standalone Audit private runtime/migration snapshots
+/standalone-audit/runtime/
+/standalone-audit/*.env

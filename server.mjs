@@ -30,6 +30,9 @@ const mirroredBrandLogoDir = path.join(__dirname, "public", "fm", "public");
 const auditUploadDir = path.join(__dirname, "audit", "uploads");
 let auditDirectoryCache = {};
 const auditUsersPath = path.join(path.dirname(dbPath), "audit-users.json");
+const auditExternalUrl = process.env.FM2_AUDIT_EXTERNAL_URL || '';
+if (auditExternalUrl && auditExternalUrl !== 'https://audit.digitalpalm.ai') throw new Error('Unexpected standalone Audit URL');
+const auditWritesFrozen = process.env.FM2_AUDIT_FREEZE === '1';
 const authSecret = process.env.FM2_AUTH_SECRET || "fm2-change-this-secret";
 const authCookieName = "fm2_session";
 const sessionTtlMs = 12 * 60 * 60 * 1000;
@@ -319,6 +322,7 @@ async function handleLogin(req, res, url) {
   const userId = body.get("userid") || body.get("userId") || body.get("username") || "";
   const password = body.get("password") || "";
   const user = userById(userId);
+  if (auditExternalUrl && user?.role === 'audit') { res.writeHead(303, {Location: auditExternalUrl + '/login', 'Cache-Control':'no-store'}); return res.end(); }
   if (!user || !(user.role === "audit" ? verifyAuditPassword(password, user.credential) : timingSafeTextEqual(password, user.password))) {
     return sendLoginPage(req, res, 401, "Invalid user ID or password.", returnTo);
   }
@@ -1631,7 +1635,7 @@ async function api(req, res, url) {
     });
   }
   if (req.method === "GET" && url.pathname === "/api/session") {
-    return send(req, res, 200, currentSession(req), "application/json; charset=utf-8", { cacheControl: "no-store" });
+    return send(req, res, 200, {...currentSession(req), auditExternalUrl}, "application/json; charset=utf-8", { cacheControl: "no-store" });
   }
   if (req.method === "GET" && url.pathname === "/api/companies") return send(req, res, 200, pageItems(db.companies, url, 25, 100));
   if (req.method === "GET" && url.pathname === "/api/projects") {
@@ -1832,7 +1836,7 @@ async function api(req, res, url) {
       const year = Number(patch.startYear);
       if (Number.isFinite(year)) projectRecord.settings.startYear = Math.trunc(year);
     }
-    if (patch.auditReport && typeof patch.auditReport === "object") {
+    if (!auditExternalUrl && !auditWritesFrozen && patch.auditReport && typeof patch.auditReport === "object") {
       const current = projectRecord.settings.auditReport && typeof projectRecord.settings.auditReport === "object"
         ? projectRecord.settings.auditReport
         : {};
@@ -1853,7 +1857,7 @@ async function api(req, res, url) {
         }
       }
     }
-    if (patch.auditSetup && typeof patch.auditSetup === "object") {
+    if (!auditExternalUrl && !auditWritesFrozen && patch.auditSetup && typeof patch.auditSetup === "object") {
       projectRecord.settings.auditSetup = cleanAuditSetup(patch.auditSetup);
     }
 
@@ -2075,6 +2079,10 @@ const server = http.createServer(async (req, res) => {
   try {
     try { auditDirectoryCache = JSON.parse(await fs.readFile(auditUsersPath, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; auditDirectoryCache = {}; }
     const url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
+    const auditApi = /^\/api\/projects\/[^/]+\/audit-[a-z]+$/.test(url.pathname);
+    if (auditExternalUrl && auditApi) return send(req,res,410,{message:'Audit has moved to ' + auditExternalUrl, auditUrl:auditExternalUrl});
+    if (auditWritesFrozen && auditApi) return send(req,res,503,{message:'Audit migration is in progress. Pending mobile work is retained; retry after migration.'});
+    if (auditExternalUrl && (['/audit','/audit.html'].includes(url.pathname) || url.pathname.startsWith('/mobile-app/'))) { res.writeHead(307,{Location:auditExternalUrl+(url.pathname.startsWith('/mobile-app/')?url.pathname:'/app'),'Cache-Control':'no-store'}); return res.end(); }
     if (req.method === "GET" && await publicIconFile(req, res, url)) return;
     if (url.pathname === "/" && req.method === "GET") return sendLoginPage(req, res, 200, "", "/app");
     if (url.pathname === "/app/") {

@@ -730,7 +730,7 @@ async function saveAuditUserPermissions() {
 }
 
 function canAccessAudit() {
-  return Boolean(state.currentSession?.userId);
+  return Boolean(state.currentSession?.userId) && !state.currentSession?.auditExternalUrl;
 }
 
 function applySessionUi() {
@@ -4258,6 +4258,7 @@ function bindNavigation() {
 async function init() {
   const session = await requestJson("/api/session", {credentials: "same-origin"});
   state.currentSession = session;
+  if (session?.auditExternalUrl && session.role === "audit") { window.location.replace(session.auditExternalUrl + "/app"); return; }
   if (session?.role === "audit") {
     state.projectData = await requestJson(`/api/projects/${PROJECT_ID}/audit-context`);
     const access = await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
@@ -4281,7 +4282,7 @@ async function init() {
   state.currentSession = session;
   state.analysis = analysis;
   state.projectData = projectData;
-  const access = await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
+  const access = session.auditExternalUrl ? {identity:{},users:[],assignees:[]} : await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
   state.auditIdentity = access.identity;
     state.auditAssignees = access.assignees || [];
   state.auditUsers = access.users || [];
@@ -4298,6 +4299,11 @@ async function init() {
   renderChecks();
   renderMarketTicker();
   bindNavigation();
+  if(session.auditExternalUrl){
+    const auditCutoverStyle=document.createElement('style');
+    auditCutoverStyle.textContent='[data-view="audit"], #audit, [data-management-tab="audit-users"], [data-management-panel="audit-users"], .management-audit-setup, label:has(input[id^="managementAudit"]) {display:none!important}';
+    document.head.append(auditCutoverStyle);
+  }
 }
 
 init().catch((error) => {

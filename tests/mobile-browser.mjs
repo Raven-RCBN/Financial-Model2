@@ -8,7 +8,7 @@ const findingTitle='Offline drainage finding '+Date.now();
 const base=process.env.MOBILE_TEST_URL || 'http://127.0.0.1:4187',api='/api/projects/project_opsl_15000ha_development/';
 const login=async(name)=>{await page.goto(base+'/mobile-app/index.html');await page.locator('[name=userid]').fill(name);await page.locator('[name=password]').fill('MobileTest-Only-2026');await page.locator('#login button').click();await page.getByRole('heading',{name:'Make every action count.'}).waitFor();await page.waitForFunction(()=>!document.querySelector('.top button')?.textContent.includes('Syncing'));};
 await login('mobile.milo');
-assert.equal((await context.request.get(base+'/api/projects')).status(),403);
+assert.ok([403,404].includes((await context.request.get(base+'/api/projects')).status()));
 await page.screenshot({path:(process.env.MOBILE_TEST_OUTPUT || '/tmp')+'/mobile-overview.png',fullPage:true});
 await page.evaluate(()=>navigator.serviceWorker.ready);
 await context.setOffline(true);

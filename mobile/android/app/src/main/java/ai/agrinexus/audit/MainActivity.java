@@ -16,7 +16,7 @@ import java.util.Set;
 
 /** Packaged offline UI uses the API HTTPS origin and ordinary HttpOnly session cookies. */
 public class MainActivity extends Activity {
- private static final String HOST="fm2.digitalpalm.ai", START="https://"+HOST+"/mobile-app/index.html";
+ private static final String HOST=BuildConfig.AUDIT_HOST, START="https://"+HOST+"/mobile-app/index.html";
  private WebView web;
  private ValueCallback<Uri[]> fileCallback;
  private Uri cameraUri;

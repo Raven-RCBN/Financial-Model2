@@ -1,0 +1,11 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import {hashAuditPassword} from '../../audit/audit-permissions.mjs';
+const [directory,envFile,handover]=process.argv.slice(2);
+if(!directory||!envFile||!handover)throw new Error('Usage: init-instance.mjs DATA_DIR NEW_ENV_FILE NEW_PRIVATE_HANDOVER');
+const password=crypto.randomBytes(18).toString('base64url'),secret=crypto.randomBytes(48).toString('hex');
+await fs.writeFile(path.join(directory,'admin-user.json'),JSON.stringify({name:'admin',credential:hashAuditPassword(password)})+'\n',{flag:'wx',mode:0o600});
+await fs.writeFile(envFile,`PORT=8900\nAUDIT_DATA_DIR=${path.resolve(directory)}\nAUDIT_SESSION_SECRET=${secret}\nPYTHON=/home/deploy_audit/venv/bin/python\n`,{flag:'wx',mode:0o600});
+await fs.writeFile(handover,`Standalone Audit administrator\nUsername: admin\nInitial password: ${password}\n\nExisting Audit users keep their current passwords. This administrator account is separate from FM2.\n`,{flag:'wx',mode:0o600});
+console.log('Independent Audit administrator and session configuration created. Password saved only in the private handover.');

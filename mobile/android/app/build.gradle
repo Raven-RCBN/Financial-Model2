@@ -1,8 +1,11 @@
 plugins { id 'com.android.application' }
+def targetAuditHost = providers.gradleProperty('auditHost').orElse('fm2.digitalpalm.ai').get()
+if (!(targetAuditHost in ['fm2.digitalpalm.ai', 'audit.digitalpalm.ai'])) throw new GradleException('Unsupported Audit host')
 android {
+ buildFeatures { buildConfig true }
  namespace 'ai.agrinexus.audit'
  compileSdk 35
- defaultConfig { applicationId 'ai.agrinexus.audit'; minSdk 26; targetSdk 35; versionCode 1; versionName '0.1.0-test' }
+ defaultConfig { applicationId 'ai.agrinexus.audit'; minSdk 26; targetSdk 35; versionCode providers.gradleProperty('auditVersionCode').orElse('1').get().toInteger(); versionName providers.gradleProperty('auditVersionName').orElse('0.1.0-test').get(); buildConfigField 'String', 'AUDIT_HOST', '"' + targetAuditHost + '"'  }
  sourceSets { main { assets.srcDirs = ['../../web'] } }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
  buildTypes { debug { debuggable true }; release { minifyEnabled false } }

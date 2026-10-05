@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import html
 import json
+import os
 import sys
 from io import BytesIO
 from pathlib import Path
@@ -135,8 +136,8 @@ def report_year(settings):
 
 def load_context(db_path: Path, project_id: str, payload):
     database = json.loads(db_path.read_text())
-    project = next(item for item in database["projects"] if item["id"] == project_id)
-    company = next(item for item in database["companies"] if item["id"] == project["companyId"])
+    project = database.get("project") or next(item for item in database["projects"] if item["id"] == project_id)
+    company = database.get("company") or next(item for item in database["companies"] if item["id"] == project["companyId"])
     settings = dict(DEFAULTS)
     settings.update((project.get("settings") or {}).get("auditReport") or {})
     settings.update(payload.get("reportSettings") or {})
@@ -147,6 +148,14 @@ def app_path(db_path: Path, value):
     clean = text(value).split("?", 1)[0]
     if clean.startswith("/"):
         clean = clean.lstrip("/")
+    if clean.startswith("audit/uploads/") and os.environ.get("AUDIT_UPLOAD_ROOT"):
+        root = Path(os.environ["AUDIT_UPLOAD_ROOT"]).resolve()
+        candidate = (root / clean[len("audit/uploads/"):]).resolve()
+        return candidate if candidate.is_relative_to(root) else root / "missing"
+    if clean.startswith("public/") and os.environ.get("AUDIT_BRAND_ROOT"):
+        candidate = Path(os.environ["AUDIT_BRAND_ROOT"]) / Path(clean).name
+        if candidate.exists():
+            return candidate
     return APP_ROOT / clean
 
 
@@ -558,7 +567,7 @@ def draw_department_issue(c, settings, logo, page_number, entry, index, db_path)
             page_number += 1
             draw_header_footer(c, settings, logo, page_number)
             y = TOP - 0.15 * inch
-        c.setFillColor(DARK_BLUE)
+        c.setFillColor(INK)
         c.setFont("Helvetica-Bold", 8.5)
         c.drawString(LEFT + 0.08 * inch, y - 0.18 * inch, "Observation images")
         y -= 0.32 * inch

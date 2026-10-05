@@ -1,0 +1,16 @@
+// Isolated synthetic fixture only; never point this test at production.
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+import assert from 'node:assert/strict';import fs from 'node:fs';
+const base=process.env.STANDALONE_TEST_URL || 'http://127.0.0.1:4188',api='/api/projects/project_opsl_15000ha_development/';
+const browser=await chromium.launch({channel:'chrome',headless:true});const context=await browser.newContext({viewport:{width:1440,height:1050}});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const adminPassword=fs.readFileSync(process.env.STANDALONE_TEST_ADMIN_FILE || '/tmp/audit-domain-prep/test-admin.txt','utf8').match(/Initial password: (.+)/)[1];
+await page.goto(base+'/login');await page.locator('[name=userid]').fill('admin');await page.locator('[name=password]').fill(adminPassword);await page.locator('button').click();await page.locator('#auditFinding').waitFor();
+assert.equal(await page.locator('.module').count(),2);assert.equal((await context.cookies()).filter(c=>c.name==='audit_session').length,1);assert.equal((await context.cookies()).some(c=>c.name==='fm2_session'),false);
+await page.locator('#adminMenu').click();await page.getByRole('heading',{name:'Audit management',exact:true}).waitFor();assert.equal(await page.locator('#auditUserDirectory tr').count(),2);
+await page.locator('[name=companyName]').fill('Standalone test company');await page.locator('#auditSettingsForm button').click();await page.waitForFunction(()=>document.querySelector('#settingsStatus').textContent==='Audit settings saved.');await page.reload();await page.locator('#adminMenu').click();assert.equal(await page.locator('[name=companyName]').inputValue(),'Standalone test company');
+await page.screenshot({path:'/tmp/audit-domain-prep/admin-directory.png',fullPage:true});
+const pdf=await context.request.post(base+api+'audit-pdf',{data:{auditYear:'2026'}});assert.equal(pdf.status(),200,await pdf.text().then(x=>x.slice(0,100)));assert.equal((await pdf.body()).subarray(0,4).toString(),'%PDF');fs.writeFileSync('/tmp/audit-domain-prep/audit-report.pdf',await pdf.body());
+await context.clearCookies();await context.request.post(base+'/login',{form:{userid:'mobile.milo',password:'MobileTest-Only-2026'}});await page.goto(base+'/app');await page.locator('#auditFinding').waitFor();assert.equal(await page.locator('#adminMenu').isVisible(),false);assert.equal((await context.request.put(base+api+'audit-settings',{data:{}})).status(),403);assert.equal((await context.request.put(base+api+'audit-access',{data:{users:[]}})).status(),403);
+assert.equal((await context.request.get(base+'/api/projects')).status(),404);assert.equal((await context.request.get(base+'/public/workbook-analysis.json')).status(),404);assert.equal((await context.request.get(base+'/data/plantation-financial-model.db.json')).status(),404);
+await page.locator('[data-audit-panel=report]').click();await page.locator('#downloadAuditReport').waitFor();await page.screenshot({path:'/tmp/audit-domain-prep/audit-desktop.png',fullPage:true});assert.deepEqual(errors,[]);
+console.log('PASS: independent login/cookie, admin directory/settings persistence, PDF generation, role isolation, no FM2 APIs/files, audit report UI.');await browser.close();
