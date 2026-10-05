@@ -1635,7 +1635,7 @@ async function api(req, res, url) {
     });
   }
   if (req.method === "GET" && url.pathname === "/api/session") {
-    return send(req, res, 200, {...currentSession(req), auditExternalUrl}, "application/json; charset=utf-8", { cacheControl: "no-store" });
+    return send(req, res, 200, {...currentSession(req), auditExternalUrl, auditWritesFrozen}, "application/json; charset=utf-8", { cacheControl: "no-store" });
   }
   if (req.method === "GET" && url.pathname === "/api/companies") return send(req, res, 200, pageItems(db.companies, url, 25, 100));
   if (req.method === "GET" && url.pathname === "/api/projects") {

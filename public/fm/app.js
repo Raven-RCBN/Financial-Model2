@@ -730,7 +730,7 @@ async function saveAuditUserPermissions() {
 }
 
 function canAccessAudit() {
-  return Boolean(state.currentSession?.userId) && !state.currentSession?.auditExternalUrl;
+  return Boolean(state.currentSession?.userId) && !state.currentSession?.auditExternalUrl && !state.currentSession?.auditWritesFrozen;
 }
 
 function applySessionUi() {
@@ -4259,6 +4259,10 @@ async function init() {
   const session = await requestJson("/api/session", {credentials: "same-origin"});
   state.currentSession = session;
   if (session?.auditExternalUrl && session.role === "audit") { window.location.replace(session.auditExternalUrl + "/app"); return; }
+  if (session?.role === "audit" && session.auditWritesFrozen) {
+    document.body.innerHTML = '<main style="padding:24px;font-family:sans-serif"><h1>Audit migration in progress</h1><p>Your saved work is retained. Please wait until the move is complete.</p><a href="/logout">Sign out</a></main>';
+    return;
+  }
   if (session?.role === "audit") {
     state.projectData = await requestJson(`/api/projects/${PROJECT_ID}/audit-context`);
     const access = await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
@@ -4282,7 +4286,7 @@ async function init() {
   state.currentSession = session;
   state.analysis = analysis;
   state.projectData = projectData;
-  const access = session.auditExternalUrl ? {identity:{},users:[],assignees:[]} : await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
+  const access = !canAccessAudit() ? {identity:{},users:[],assignees:[]} : await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
   state.auditIdentity = access.identity;
     state.auditAssignees = access.assignees || [];
   state.auditUsers = access.users || [];
@@ -4299,7 +4303,7 @@ async function init() {
   renderChecks();
   renderMarketTicker();
   bindNavigation();
-  if(session.auditExternalUrl){
+  if(!canAccessAudit()){
     const auditCutoverStyle=document.createElement('style');
     auditCutoverStyle.textContent='[data-view="audit"], #audit, [data-management-tab="audit-users"], [data-management-panel="audit-users"], .management-audit-setup, label:has(input[id^="managementAudit"]) {display:none!important}';
     document.head.append(auditCutoverStyle);
