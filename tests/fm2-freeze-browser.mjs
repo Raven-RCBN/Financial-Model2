@@ -8,8 +8,9 @@ const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 assert.ok(process.env.AUDIT_CUTOVER_TEST_DB,'Provide a synthetic AUDIT_CUTOVER_TEST_DB');
 const fixture=await fs.mkdtemp(path.join(os.tmpdir(),'fm2-freeze-browser-'));
 await fs.copyFile(process.env.AUDIT_CUTOVER_TEST_DB,path.join(fixture,'db.json'));
+const postCutover=process.env.FM2_POST_CUTOVER==='1';
 const port=43191, origin='https://fm2.digitalpalm.ai', base='http://127.0.0.1:'+port;
-const child=spawn(process.execPath,['server.mjs'],{env:{...process.env,PORT:String(port),FM2_DB_PATH:path.join(fixture,'db.json'),FM2_ADMIN_USER:'admin',FM2_ADMIN_PASSWORD:'Synthetic-Admin-2026',FM2_AUTH_USER:'finance',FM2_AUTH_PASSWORD:'Synthetic-Finance-2026',FM2_AUDIT_FREEZE:'1',FM2_AUDIT_EXTERNAL_URL:'',FM2_MONGODB_URI:'',MONGODB_URI:''},stdio:['ignore','pipe','pipe']});
+const child=spawn(process.execPath,['server.mjs'],{env:{...process.env,PORT:String(port),FM2_DB_PATH:path.join(fixture,'db.json'),FM2_ADMIN_USER:'admin',FM2_ADMIN_PASSWORD:'Synthetic-Admin-2026',FM2_AUTH_USER:'finance',FM2_AUTH_PASSWORD:'Synthetic-Finance-2026',FM2_AUDIT_FREEZE:postCutover?'0':'1',FM2_AUDIT_EXTERNAL_URL:postCutover?'https://audit.digitalpalm.ai':'',FM2_MONGODB_URI:'',MONGODB_URI:''},stdio:['ignore','pipe','pipe']});
 let browser;
 try{
   await new Promise((resolve,reject)=>{child.stdout.on('data',d=>{if(String(d).includes('running at'))resolve()});child.on('exit',c=>reject(new Error('Server exited '+c)));setTimeout(()=>reject(new Error('Startup timeout')),10000).unref()});
@@ -39,11 +40,22 @@ try{
     assert.equal(await page.locator('[data-view=audit]').isVisible(),false);
     for(const element of await page.locator('[data-management-tab="audit-users"],.management-audit-setup,label:has(input[id^="managementAudit"])').all())assert.equal(await element.isVisible(),false);
     const session=await page.evaluate(()=>fetch('/api/session').then(r=>r.json()));
-    assert.equal(session.auditWritesFrozen,true);assert.equal(session.auditExternalUrl,'');
+    assert.equal(session.auditWritesFrozen,!postCutover);assert.equal(session.auditExternalUrl,postCutover?'https://audit.digitalpalm.ai':'');
+    if(postCutover){
+      assert.equal(await page.locator('[data-view=audit],#audit,[data-management-tab="audit-users"],#auditUserDirectory,input[id^="managementAudit"]').count(),0);
+      if(user==='admin'){
+        await page.locator('#managementCompanyName').fill('Synthetic FM2 Company');
+        const saved=page.waitForResponse(r=>r.url().endsWith('/management')&&r.request().method()==='PUT');
+        await page.locator('#saveManagementConsole').click();
+        const result=await saved;assert.equal(result.status(),200);
+        const sent=result.request().postDataJSON();assert.equal('auditSetup' in sent,false);assert.equal('auditReport' in sent,false);
+        await page.waitForFunction(()=>document.querySelector('#managementConsoleStatus')?.textContent.includes('Synthetic FM2 Company'));
+      }
+    }
     assert.deepEqual(auditRequests,[],'Finance startup must not call frozen Audit APIs');
     assert.deepEqual(errors,[]);
-    for(const method of ['GET','POST','PUT'])assert.equal((await fetch(base+'/api/projects/project_opsl_15000ha_development/audit-access',{method})).status,503);
+    for(const method of ['GET','POST','PUT'])assert.equal((await fetch(base+'/api/projects/project_opsl_15000ha_development/audit-access',{method})).status,postCutover?410:503);
     await context.unrouteAll({behavior:'wait'});await context.close();
   }
-  console.log('PASS: finance and admin initialize on production hostname during freeze, financial navigation works, Audit controls hidden, no Audit requests, legacy APIs remain 503.');
+  console.log(postCutover?'PASS: final FM2-only finance/admin browser, financial navigation/settings save, no Audit DOM or requests, legacy APIs410.':'PASS: finance/admin browser during freeze, financial navigation, no Audit requests, legacy APIs503.');
 }finally{await browser?.close();child.kill();await new Promise(resolve=>child.exitCode!==null?resolve():child.once('exit',resolve));await fs.rm(fixture,{recursive:true,force:true});}

@@ -6,7 +6,7 @@
     <title>Plantation Financial Model</title>
     <link rel="icon" type="image/png" sizes="32x32" href="./public/agrinexus-favicon-32.png?v=6" />
     <link rel="apple-touch-icon" sizes="180x180" href="./public/apple-touch-icon.png?v=6" />
-    <link rel="stylesheet" href="./styles.css?v=agintel-27" />
+    <link rel="stylesheet" href="./styles.css?v=fm2-only-28" />
   </head>
   <body>
     <div class="app-shell">
@@ -56,7 +56,7 @@
           <button class="module" data-view="management"><span class="mini-icon">mc</span> Management Console</button>
           <button class="module" data-view="inputs"><span class="mini-icon">in</span> Input Capture</button>
           <button class="module" data-view="dashboards"><span class="mini-icon">rp</span> Reports</button>
-          <button class="module" data-view="audit"><span class="mini-icon">au</span> Audit</button>
+
           <div class="sidebar-card">
             <span>Workbook Source</span>
             <strong>OPSL Aug26 FINAL</strong>
@@ -122,7 +122,7 @@
               <div class="architecture-grid">
                 <div><b>Initial Workbook Migration</b><span>Use the Excel workbook once to map structure, seed records, and archive source evidence.</span></div>
                 <div><b>Input Workbench</b><span>Budget, material, personnel, exchange-rate, bank balance, and scenario entry screens.</span></div>
-                <div><b>Database Calculation Engine</b><span>Editable formula rules, dependency graph, run status, checks, and audit logs.</span></div>
+                <div><b>Database Calculation Engine</b><span>Editable formula rules, dependency graph, run status, checks, and change logs.</span></div>
                 <div><b>Approval Workflow</b><span>Estate submission, finance review, approver sign-off, exception comments, and locked periods.</span></div>
                 <div><b>Reports & Dashboards</b><span>All non-input display sheets become reviewable reports with dashboards for funding, costing, variance, and financial analysis.</span></div>
                 <div><b>Access Control</b><span>Tenant, estate, cost-center, role, and sheet-level permissions matching Advisory shell.</span></div>
@@ -136,13 +136,13 @@
                 <div>
                   <span class="eyebrow">Management Console</span>
                   <h2>Company, project, users, and controls</h2>
-                  <p>Maintain master settings, user workflow, model validation, and audit controls from one administration area.</p>
+                  <p>Maintain master settings, user workflow, model validation, and financial controls from one administration area.</p>
                 </div>
                 <div class="mc-tabs" id="managementTabs" aria-label="Management console tabs">
                   <button class="active" data-management-tab="settings">Master Settings</button>
                   <button data-management-tab="governance">Governance</button>
                   <button data-management-tab="users">FM2 Users</button>
-                  <button data-management-tab="audit-users">Audit Users &amp; Roles</button>
+
                   <button data-management-tab="calculations">Calculations</button>
                   <button data-management-tab="validation">Validation</button>
                 </div>
@@ -164,17 +164,14 @@
                     <b>FM2 User Directory</b>
                     <span>Assigned users and account status</span>
                   </button>
-                  <button data-management-tab="audit-users">
-                    <b>Audit User Directory</b>
-                    <span>Audit creators, corrective action authors and respondents</span>
-                  </button>
+
                   <button data-management-tab="calculations">
                     <b>Calculation Engine</b>
                     <span>Formula publish, dependency graph, and recalculation</span>
                   </button>
                   <button data-management-tab="validation">
                     <b>Model Controls</b>
-                    <span>Automated checks, audit trail, and publishing state</span>
+                    <span>Automated checks, change history, and publishing state</span>
                   </button>
                 </nav>
 
@@ -205,77 +202,9 @@
                           <span>Start year</span>
                           <input id="managementStartYear" type="number" min="1900" max="2200" step="1" />
                         </label>
-                        <label class="field management-setting-row">
-                          <span>Audit report title</span>
-                          <input id="managementAuditReportTitle" />
-                        </label>
-                        <label class="field management-setting-row">
-                          <span>Audit site / client</span>
-                          <input id="managementAuditClientName" />
-                        </label>
-                        <label class="field management-setting-row">
-                          <span>Audit location</span>
-                          <input id="managementAuditLocation" />
-                        </label>
-                        <label class="field management-setting-row">
-                          <span>Prepared by</span>
-                          <input id="managementAuditPreparedBy" />
-                        </label>
-                        <label class="field management-setting-row">
-                          <span>Audit period start</span>
-                          <input id="managementAuditPeriodStart" type="date" />
-                        </label>
-                        <label class="field management-setting-row">
-                          <span>Audit period end</span>
-                          <input id="managementAuditPeriodEnd" type="date" />
-                        </label>
-                        <label class="field management-setting-row">
-                          <span>Date of issue</span>
-                          <input id="managementAuditIssueDate" type="date" />
-                        </label>
-                        <label class="field management-setting-row">
-                          <span>Confidentiality label</span>
-                          <input id="managementAuditConfidentiality" />
-                        </label>
+
                       </div>
-                      <div class="management-audit-setup" aria-label="Audit master data setup">
-                        <div class="management-subhead">
-                          <span class="eyebrow">Audit Setup</span>
-                          <h4>Master data for Audit menu</h4>
-                        </div>
-                        <div class="audit-setup-grid">
-                          <div class="audit-setup-card">
-                            <label class="field">
-                              <span>Add report year</span>
-                              <div class="audit-setup-add-row">
-                                <input id="managementAuditYearInput" inputmode="numeric" placeholder="2026" />
-                                <button class="secondary-button" type="button" data-audit-setup-add="years"><span class="mini-icon">+</span> Add</button>
-                              </div>
-                            </label>
-                            <div class="audit-setup-chips" id="managementAuditYearChips"></div>
-                          </div>
-                          <div class="audit-setup-card">
-                            <label class="field">
-                              <span>Add department</span>
-                              <div class="audit-setup-add-row">
-                                <input id="managementAuditDepartmentInput" placeholder="Workshop Department" />
-                                <button class="secondary-button" type="button" data-audit-setup-add="departments"><span class="mini-icon">+</span> Add</button>
-                              </div>
-                            </label>
-                            <div class="audit-setup-chips" id="managementAuditDepartmentChips"></div>
-                          </div>
-                          <div class="audit-setup-card">
-                            <label class="field">
-                              <span>Add audit area</span>
-                              <div class="audit-setup-add-row">
-                                <input id="managementAuditAreaInput" placeholder="Fuel control" />
-                                <button class="secondary-button" type="button" data-audit-setup-add="areas"><span class="mini-icon">+</span> Add</button>
-                              </div>
-                            </label>
-                            <div class="audit-setup-chips" id="managementAuditAreaChips"></div>
-                          </div>
-                        </div>
-                      </div>
+
                       <footer class="management-footer">
                         <span id="managementConsoleStatus">Report headers and period years use these saved settings.</span>
                         <button class="primary-button" id="saveManagementConsole"><span class="mini-icon">sv</span> Save</button>
@@ -366,30 +295,6 @@
                     </article>
                   </section>
 
-                  <section class="mc-section" data-management-panel="audit-users" hidden>
-                    <article class="mc-panel user-directory-panel">
-                      <header><div><span class="eyebrow">Audit Users &amp; Roles</span><h3>Audit User Directory</h3></div><span class="status-pill">Admin only</span></header>
-                      <p class="audit-directory-note">Manage audit assignments independently from FM2 users. Administrators have all audit permissions. Create dedicated Audit sign-in accounts here. Audit users can access only the Audit module. Set a password when adding a user; leave it blank when editing to keep the current password.</p>
-                      <div class="directory-scroll"><table class="permission-table user-directory"><thead><tr><th>Sign-in username</th><th>Email</th><th>Audit roles</th><th>Status</th><th>Actions</th></tr></thead><tbody id="auditUserDirectory"></tbody></table></div>
-                      <form id="auditUserForm" class="audit-directory-form">
-                        <h4>Add / edit audit user</h4><input type="hidden" name="id" />
-                        <div class="audit-action-grid">
-                          <label class="field"><span>Sign-in username</span><input name="name" required /></label>
-                          <label class="field"><span>Email</span><input name="email" type="email" required /></label>
-                          <label class="field"><span>Password (new or reset)</span><input name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" /></label>
-                          <label class="field"><span>Status</span><select name="status"><option>Active</option><option>Inactive</option></select></label>
-                        </div>
-                        <fieldset><legend>Audit roles — select one or more</legend>
-                          <label class="audit-permission-option"><input type="checkbox" name="create" /> Audit creator — create observations and findings</label>
-                          <label class="audit-permission-option"><input type="checkbox" name="recommend" /> Corrective action author — add actions, owners and due dates</label>
-                          <label class="audit-permission-option"><input type="checkbox" name="respond" /> Assigned respondent — reply and update status on actions assigned to their email</label>
-                        </fieldset>
-                        <button class="primary-button" type="submit">Save audit user</button> <button class="secondary-button" type="button" id="cancelAuditUserEdit">Clear</button>
-                        <p id="auditDirectoryStatus" role="status"></p>
-                      </form>
-                    </article>
-                  </section>
-
                   <section class="mc-section" data-management-panel="calculations">
                     <article class="mc-panel calculation-console">
                       <header>
@@ -447,7 +352,7 @@
                         <div class="check-list" id="managementCheckList"></div>
                       </article>
                       <article class="mc-panel">
-                        <header><h3>Audit Trail</h3></header>
+                        <header><h3>Financial Change History</h3></header>
                         <div class="timeline">
                           <div><b>Source workbook migrated</b><span>One-time Excel structure captured and archived.</span></div>
                           <div><b>Inputs classified</b><span>Yellow tabs and yellow cells converted into database-backed fields.</span></div>
@@ -579,26 +484,11 @@
             </div>
           </section>
 
-          <section class="view" id="audit">
-            <div class="page-head compact audit-head">
-              <div>
-                <span class="eyebrow">Audit Module</span>
-                <h2>Field audit capture and report</h2>
-                <p>Mobile-ready audit data entry with evidence capture, GPS tagging, action owners, and an OBAN-style report preview.</p>
-              </div>
-              <div class="audit-tabs" id="auditTabs" aria-label="Audit sections">
-                <button class="active" data-audit-panel="entry">Data Entry</button>
-                <button data-audit-panel="report">Report</button>
-              </div>
-            </div>
-            <div id="auditWorkspace"></div>
-          </section>
-
           <section class="view" id="checks">
             <div class="page-head compact">
               <div>
                 <span class="eyebrow">Controls</span>
-                <h2>Model validation and audit trail</h2>
+                <h2>Model validation and change history</h2>
               </div>
               <span class="status-pill red" id="checkStatus">Needs review</span>
             </div>
@@ -608,7 +498,7 @@
                 <div class="check-list" id="checkList"></div>
               </article>
               <article class="panel">
-                <header><h3>Audit Trail</h3></header>
+                <header><h3>Financial Change History</h3></header>
                 <div class="timeline">
                   <div><b>Source workbook migrated</b><span>One-time Excel structure captured and archived.</span></div>
                   <div><b>Inputs classified</b><span>Yellow tabs and yellow cells converted into database-backed fields.</span></div>
@@ -621,6 +511,6 @@
         </section>
       </main>
     </div>
-    <script src="./app.js?v=agintel-27"></script>
+    <script src="./app.js?v=fm2-only-agintel-27"></script>
   </body>
 </html>

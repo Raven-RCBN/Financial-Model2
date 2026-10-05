@@ -42,7 +42,9 @@ test("ships the static financial model app and seeded payload", async () => {
   ]);
 
   assert.match(index, /Plantation Financial Model/);
-  assert.match(index, /\.\/app\.js\?v=25/);
+  assert.match(index, /\.\/app\.js\?v=fm2-only-[\w-]+/);
+  assert.doesNotMatch(index, /data-view="audit"|auditUserDirectory|managementAudit/);
+  assert.doesNotMatch(app, /function renderAudit|audit-access|audit-entries/);
   assert.match(app, /LOCAL_PROJECT_STORAGE_KEY/);
   assert.match(app, /\.\/project-data\.json/);
   assert.match(seed, /Octavus Plantation Ltd/);
