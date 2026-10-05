@@ -1,3 +1,4 @@
+import {loginPage} from './login-page.mjs';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -35,7 +36,7 @@ function signature(value){return crypto.createHmac('sha256',authSecret).update(v
 function equal(a,b){const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&crypto.timingSafeEqual(x,y);}
 function userById(userId,directories,admin){if(admin.name===userId)return {...admin,userId,role:'admin'};for(const [projectId,users] of Object.entries(directories)){const user=users.find(u=>u.name===userId&&u.status==='Active'&&u.credential);if(user)return {...user,userId,role:'audit',projectIds:[projectId]};}return null;}
 function sessionFor(req,directories,admin){try{const cookie=String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(authCookieName+'='));if(!cookie)return null;const [payload,sig]=cookie.slice(authCookieName.length+1).split('.');if(!equal(sig,signature(payload)))return null;const token=JSON.parse(Buffer.from(payload,'base64url'));const user=userById(token.userId,directories,admin);if(!user||token.expiresAt<=Date.now()||token.authVersion!==user.credential.salt)return null;return {userId:user.userId,role:user.role,projectIds:user.projectIds,expiresAt:token.expiresAt};}catch{return null;}}
-function loginPage(error=''){return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>AgIntel Audit login</title><link rel="stylesheet" href="/mobile-app/styles.css"></head><body><main class="main"><section class="login card"><div class="mark">a</div><div class="eyebrow">AgIntel Audit</div><h1>Sign in to Audit</h1><p>Independent audit management and field capture.</p>${error?'<p role="alert">Invalid username or password.</p>':''}<form method="post" action="/login"><label class="field"><span>Username</span><input name="userid" autocomplete="username" required></label><label class="field"><span>Password</span><input name="password" type="password" autocomplete="current-password" required></label><button class="primary wide">Sign in</button></form><p><a href="/mobile-app/index.html">Open mobile &amp; offline workspace</a></p></section></main></body></html>`;}
+
 async function asset(req,res,file){try{return send(req,res,200,await fs.readFile(file),mime[path.extname(file)]||'application/octet-stream');}catch(e){if(e.code==='ENOENT')return notFound(req,res);throw e;}}
 const mobileFiles=new Set(['index.html','app.js','styles.css','core.mjs','manifest.json','sw.js']);
 async function handle(req,res){
