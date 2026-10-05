@@ -1,5 +1,7 @@
 # Standalone Audit domain preparation
 
+Future work continues in the Audit project/chat. Start with [the Audit handover](HANDOVER.md) and [deployment ownership](../deployments/README.md). FM2-only deployment templates live separately in `deployments/fm2/`.
+
 Prepared 6 October 2026 for **https://audit.digitalpalm.ai**. The supplied `Audit-Deployment-Access.md` confirms the domain/TLS and `audit-web.service` are provisioned; the package now targets `/home/deploy_audit/app` and loopback port 8900. This is a preparation branch. This task has not changed the current FM2 deployment, DNS, TLS or live Audit data.
 
 ## Included

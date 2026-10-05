@@ -24,6 +24,10 @@ Logs and environment files may contain sensitive data. Do not publish their cont
 
 Verify the live FM2 Audit API reports JSON backend before using the JSON exporter. If it reports MongoDB, stop and prepare an approved export from the active MongoDB collection. Do not migrate a stale JSON fallback.
 
+## Chat ownership
+
+Audit work and deployments belong to the Audit project chat. FM2 edits, freezes, redirects and restarts belong to the FM2 chat. Coordinate the one-time migration, but do not execute FM2 deployment commands from the Audit chat. The FM2 templates live separately in `deployments/fm2/` and are excluded from the Audit release.
+
 ## Two separate decisions
 
 1. **New-domain staging/activation:** installs only the new Audit app using copied data. Its deployment script does not restart, edit or remove FM2.
@@ -40,7 +44,7 @@ The root launcher uses `exec /usr/bin/node server.mjs`, runs in the existing app
 ## Freeze and export — only after cutover approval
 
 1. Back up affected FM2 source and the existing service drop-ins. Retain original data and uploads.
-2. Install the separately prepared FM2 cutover code archive, which is inert by default. A server administrator must install `fm2-freeze.conf` as `/etc/systemd/system/fm2.service.d/95-audit-migration.conf`, reload systemd and restart FM2. The existing `deploy_fm2` helper can restart only; it cannot create the drop-in. This Audit preparation does not perform that restart.
+2. Install the separately prepared FM2 cutover code archive, which is inert by default. A server administrator must install `deployments/fm2/fm2-freeze.conf` from the source repository as `/etc/systemd/system/fm2.service.d/95-audit-migration.conf`, reload systemd and restart FM2. The existing `deploy_fm2` helper can restart only; it cannot create the drop-in. This Audit preparation does not perform that restart.
 3. Confirm Audit API reads/writes return 503 and FM2 finance remains available. Ensure old in-flight requests are drained. This avoids the old JSON store writing seed data during the final export.
 4. As `deploy_fm2`, create a NEW private snapshot using the staged exporter:
 
@@ -75,7 +79,7 @@ Verify HTTPS `/healthz`, login/logout, role checks, user directory, settings per
 
 ## Finish FM2 separation and distribute APK
 
-1. After new-host validation, a server administrator replaces the freeze drop-in with `fm2-cutover.conf`, reloads systemd and restarts FM2. This is a separate authorized action; the Audit deployment script does not do it.
+1. After new-host validation, a server administrator replaces the freeze drop-in with `deployments/fm2/fm2-cutover.conf` from the source repository, reloads systemd and restarts FM2. This is a separate authorized action; the Audit deployment script does not do it.
 2. Confirm FM2 hides Audit forms, reports and Audit management controls. Old `/audit` and `/mobile-app/` pages redirect to the new host; old Audit APIs return 410. FM2's financial menus, data and login remain.
 3. Distribute `AgIntel-Audit-new-domain-test.apk` after the new host is ready. Version code 2, package `ai.agrinexus.audit`, same signing certificate as the earlier test APK. It requires online login/download on the new origin.
 4. All users must sync the OLD APK before installing the update. Offline storage is per origin; pending work is not automatically copied between domains. Do not uninstall or clear storage with unsynced work. Test camera/GPS on a physical Android device.
