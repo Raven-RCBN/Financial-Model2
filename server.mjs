@@ -243,38 +243,39 @@ function loginHtml(errorMessage = "", returnTo = "/") {
         margin: 0;
         display: grid;
         place-items: center;
-        background: #f4f7fb;
-        color: #172033;
+        background: #f3f8f3;
+        color: #0a3d14;
       }
       main {
         width: min(420px, calc(100vw - 32px));
         background: #ffffff;
-        border: 1px solid #d9e1ec;
+        border: 1px solid #dce7db;
         border-radius: 8px;
         box-shadow: 0 18px 50px rgba(23, 32, 51, 0.12);
         padding: 32px;
+        border-top: 3px solid #f5a800;
       }
-      h1 { margin: 0 0 8px; font-size: 24px; }
-      p { margin: 0 0 24px; color: #667085; line-height: 1.5; }
-      label { display: grid; gap: 8px; margin-bottom: 16px; font-weight: 700; font-size: 13px; }
+      h1 { margin: 0 0 8px; font-size: 24px; font-weight: 500; }
+      p { margin: 0 0 24px; color: #697c6e; line-height: 1.5; }
+      label { display: grid; gap: 8px; margin-bottom: 16px; font-weight: 400; font-size: 13px; }
       input {
         box-sizing: border-box;
         width: 100%;
-        border: 1px solid #cbd5e1;
+        border: 1px solid #d3dfd0;
         border-radius: 6px;
         padding: 12px 14px;
         font: inherit;
       }
-      input:focus { outline: 3px solid rgba(24, 119, 242, 0.18); border-color: #1877f2; }
+      input:focus { outline: 3px solid rgba(197, 155, 56, 0.18); border-color: #145a25; }
       button {
         width: 100%;
         border: 0;
         border-radius: 6px;
         padding: 13px 16px;
-        background: #123a6f;
+        background: #145a25;
         color: #fff;
         font: inherit;
-        font-weight: 800;
+        font-weight: 400;
         cursor: pointer;
       }
       .error {
@@ -283,14 +284,14 @@ function loginHtml(errorMessage = "", returnTo = "/") {
         border-radius: 6px;
         background: #fef3f2;
         color: #b42318;
-        font-weight: 700;
+        font-weight: 400;
       }
     </style>
   </head>
   <body>
     <main>
       <h1>Financial Model 2</h1>
-      <p>Sign in to access the seeded plantation financial model.</p>
+      <p>Sign in to your financial model or Audit workspace.</p>
       ${errorMessage ? `<div class="error">${escapeHtml(errorMessage)}</div>` : ""}
       <form method="post" action="/login?returnTo=${encodeURIComponent(safeReturnTo(returnTo))}">
         <label>User ID<input name="userid" autocomplete="username" required autofocus /></label>

@@ -3049,7 +3049,7 @@ function auditOptions(options, selected, counts = null) {
     const total = counts ? Number(counts[option] || 0) : 0;
     const selectedAttr = option === selected ? " selected" : "";
     const dataAttr = counts ? ` data-has-report="${total > 0 ? "1" : "0"}"` : "";
-    const styleAttr = total > 0 ? ' style="background:#eaf8ef;color:#17643c;font-weight:800;"' : "";
+    const styleAttr = total > 0 ? ' style="background:#edf5ee;color:#145a25;font-weight:400;"' : "";
     return `<option${selectedAttr}${dataAttr}${styleAttr}>${escapeHtml(option)}</option>`;
   }).join("");
 }
