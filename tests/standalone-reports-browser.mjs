@@ -15,19 +15,20 @@ try{
   const pdf=await context.request.post(base+api+'audit-pdf',{data:{auditYear:year,auditEntity:company}});assert.equal(pdf.status(),200);const bytes=await pdf.body();assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'),pkg.reports[year].sha256);
   fs.writeFileSync(process.env.REPORT_OUTPUT_DIR+'/OBAN-Audit-Report-'+year+'.pdf',bytes);
  }
- await page.locator('[data-audit-panel=report]').click();await page.locator('.audit-source-preview iframe').waitFor();
+ await page.locator('[data-audit-panel=report]').click();await page.locator('.audit-finding-card').first().waitFor();assert.equal(await page.locator('iframe').count(),0);assert.equal(await page.getByRole('link',{name:/original report/i}).count(),0);
  assert.equal(await page.locator('.audit-summary-grid > div').first().locator('b').innerText(),'22');
  assert.equal((await page.locator('.audit-finding-card').count()),5);
  assert((await page.locator('.audit-source-details').first().innerText()).includes('Management response'));
- await page.locator('#auditReportYear').selectOption('2024');await page.waitForFunction(()=>document.querySelector('.audit-source-preview')?.textContent.includes('55 pages'));
+ await Promise.all([page.waitForResponse(r=>r.url().includes('audit-entries?')&&r.url().includes('auditYear=2024')),page.locator('#auditReportYear').selectOption('2024')]);await page.locator('.audit-finding-card').first().waitFor();
  await page.screenshot({path:process.env.REPORT_OUTPUT_DIR+'/report-webapp.png'});
- await page.locator('#auditEntity').selectOption(other);await page.waitForFunction(()=>!document.querySelector('.audit-source-preview'));
+ await page.locator('#auditEntity').selectOption(other);await page.waitForFunction(()=>document.querySelector('.audit-summary-grid > div b')?.textContent==='0');
  assert.equal(await page.locator('.audit-summary-grid > div').first().locator('b').innerText(),'0');
  const isolated=await context.request.post(base+api+'audit-entries',{data:{id:'company-isolation-test',auditYear:'2025',entity:other,department:'Test department',finding:'Company isolation test only',impact:'Synthetic fixture',priority:'Low',actions:[]}});assert.equal(isolated.status(),201);
  const otherList=await(await context.request.get(base+api+'audit-entries?auditYear=2025&company='+encodeURIComponent(other))).json();assert.equal(otherList.total,1);assert.equal(otherList.items[0].entity,other);
  const oban=await(await context.request.get(base+api+'audit-entries?auditYear=2025&company='+encodeURIComponent(company))).json();assert.equal(oban.total,22);
  assert.equal((await context.request.get(base+api+'audit-source-report?auditYear=2025&company='+encodeURIComponent(other))).status(),404);
  assert.equal((await context.request.post(base+api+'audit-entries',{data:{finding:'Invalid company',entity:'Unknown'}})).status(),400);
+ const cached=await context.request.get(base+api+'audit-entries?auditYear=2025&company='+encodeURIComponent(company));assert(cached.headers().etag);const validated=await context.request.get(base+api+'audit-entries?auditYear=2025&company='+encodeURIComponent(company),{headers:{'If-None-Match':cached.headers().etag}});assert.equal(validated.status(),304);
  const otherPdf=await context.request.post(base+api+'audit-pdf',{data:{auditYear:'2025',auditEntity:other}});assert.equal(otherPdf.status(),200);fs.writeFileSync(process.env.REPORT_OUTPUT_DIR+'/other-company-test.pdf',await otherPdf.body());
  const access=await(await context.request.get(base+api+'audit-access')).json(),owner=access.assignees.find(u=>u.name==='mobile.milo');
  const added=await context.request.post(base+api+'audit-entries',{data:{id:'oban_2025_issue_01',operation:'add-action',action:{description:'Synthetic appendix verification action',owner:owner.name,email:owner.email,dueDate:'2026-12-31'}}});assert.equal(added.status(),201);

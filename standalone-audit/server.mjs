@@ -1,3 +1,6 @@
+import {indexedReportListing,allStandaloneEntries as allAuditEntries} from './query-store.mjs';
+import {gzip} from 'node:zlib';
+import {promisify} from 'node:util';
 import {importSourceReports} from './scripts/import-source-reports.mjs';
 import {auditCompanies,selectedCompany,companyEntries,reportListing} from './report-data.mjs';
 import {loginPage} from './login-page.mjs';
@@ -7,14 +10,15 @@ import fs from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {spawnSync} from 'node:child_process';
-import {allAuditEntries,createAuditEntry,listAuditEntries,auditReportDefaults} from '../audit/audit-store.mjs';
+import {spawn} from 'node:child_process';
+import {createAuditEntry,listAuditEntries,auditReportDefaults} from '../audit/audit-store.mjs';
 import {auditIdentity,auditAssignees,validateAuditAssignees,applyAuditWrite,hashAuditPassword,verifyAuditPassword} from '../audit/audit-permissions.mjs';
 import {prepareMobileWrite} from '../audit/mobile-sync.mjs';
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
 const assetRoot=existsSync(path.join(__dirname,'audit'))?__dirname:path.dirname(__dirname);
 process.env.AUDIT_DISABLE_SEED='1';
+if(process.env.AUDIT_MONGODB_URI)throw new Error('SQLite query indexing supports the JSON backend only; prepare a MongoDB query adapter before enabling MongoDB.');
 const dataDir=path.resolve(process.env.AUDIT_DATA_DIR || path.join(__dirname,'runtime'));
 const auditUsersPath=path.join(dataDir,'audit-users.json');
 const dbPath=path.join(dataDir,'audit-context.json');
@@ -28,7 +32,15 @@ let queue=Promise.resolve();
 const fail=(message,statusCode=400)=>{throw Object.assign(new Error(message),{statusCode});};
 async function readJson(file){return JSON.parse(await fs.readFile(file,'utf8'));}
 async function atomicJson(file,value){await fs.mkdir(path.dirname(file),{recursive:true,mode:0o700});const tmp=file+'.'+crypto.randomUUID()+'.tmp';await fs.writeFile(tmp,JSON.stringify(value,null,2)+'\n',{mode:0o600});await fs.rename(tmp,file);}
-function send(req,res,status,value,type='application/json; charset=utf-8'){res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin'});res.end(Buffer.isBuffer(value)||typeof value==='string'?value:JSON.stringify(value));}
+const gzipAsync=promisify(gzip);
+async function send(req,res,status,value,type='application/json; charset=utf-8',options={}){
+ let bytes=Buffer.isBuffer(value)?value:Buffer.from(typeof value==='string'?value:JSON.stringify(value));
+ const cacheable=req.method==='GET'&&status===200&&(options.revalidate||req.url?.includes('/audit-entries?'));
+ const headers={'Content-Type':type,'Cache-Control':cacheable?'private, no-cache':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Vary':'Accept-Encoding, Cookie'};
+ if(cacheable){headers.ETag='W/"'+crypto.createHash('sha256').update(bytes).digest('hex')+'"';if(req.headers['if-none-match']===headers.ETag){res.writeHead(304,headers);return res.end();}}
+ if(bytes.length>1024&&/json|javascript|text\/|svg/.test(type)&&String(req.headers['accept-encoding']||'').split(',').some(v=>{const [name,...params]=v.trim().split(';');return name==='gzip'&&!params.some(p=>/^q=/.test(p.trim())&&Number(p.trim().slice(2))===0);})){bytes=await gzipAsync(bytes);headers['Content-Encoding']='gzip';}
+ headers['Content-Length']=bytes.length;res.writeHead(status,headers);res.end(bytes);
+}
 const forbidden=(req,res,message='Administrator permission required.')=>send(req,res,403,{message});
 const badRequest=(req,res,message)=>send(req,res,400,{message});
 const notFound=(req,res)=>send(req,res,404,{message:'Not found'});
@@ -40,8 +52,17 @@ function equal(a,b){const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.len
 function userById(userId,directories,admin){if(admin.name===userId)return {...admin,userId,role:'admin'};for(const [projectId,users] of Object.entries(directories)){const user=users.find(u=>u.name===userId&&u.status==='Active'&&u.credential);if(user)return {...user,userId,role:'audit',projectIds:[projectId]};}return null;}
 function sessionFor(req,directories,admin){try{const cookie=String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(authCookieName+'='));if(!cookie)return null;const [payload,sig]=cookie.slice(authCookieName.length+1).split('.');if(!equal(sig,signature(payload)))return null;const token=JSON.parse(Buffer.from(payload,'base64url'));const user=userById(token.userId,directories,admin);if(!user||token.expiresAt<=Date.now()||token.authVersion!==user.credential.salt)return null;return {userId:user.userId,role:user.role,projectIds:user.projectIds,expiresAt:token.expiresAt};}catch{return null;}}
 
-async function asset(req,res,file){try{return send(req,res,200,await fs.readFile(file),mime[path.extname(file)]||'application/octet-stream');}catch(e){if(e.code==='ENOENT')return notFound(req,res);throw e;}}
+async function asset(req,res,file){try{return send(req,res,200,await fs.readFile(file),mime[path.extname(file)]||'application/octet-stream',{revalidate:true});}catch(e){if(e.code==='ENOENT')return notFound(req,res);throw e;}}
 const mobileFiles=new Set(['index.html','app.js','styles.css','core.mjs','manifest.json','sw.js']);
+let activePdfs=0;
+async function renderPdf(script,payload){
+ if(activePdfs>=2)fail('Two reports are being prepared. Please retry shortly.',429);
+ activePdfs++;
+ try{return await new Promise((resolve,reject)=>{
+ const child=spawn(pythonPath,[script],{env:{...process.env,AUDIT_UPLOAD_ROOT:auditUploadDir,AUDIT_BRAND_ROOT:path.join(dataDir,'branding')},stdio:['pipe','pipe','pipe']}),parts=[];let bytes=0;
+ const timer=setTimeout(()=>child.kill(),120000);child.stdout.on('data',part=>{bytes+=part.length;if(bytes>80*1024*1024)child.kill();else parts.push(part);});child.stderr.resume();child.stdin.on('error',()=>{});child.on('error',reject);child.on('close',status=>{clearTimeout(timer);resolve({status,stdout:Buffer.concat(parts)});});child.stdin.end(JSON.stringify(payload));
+ });}finally{activePdfs--;}
+}
 async function handle(req,res){
  const url=new URL(req.url,'http://127.0.0.1');
  if(url.pathname==='/healthz')return send(req,res,200,{service:'audit',status:'ok'});
@@ -124,7 +145,7 @@ async function handle(req,res){
   const imported=report?.companyName===company;
   const reportSettings={...auditReportDefaults,...context.project.settings?.auditReport,...context.project.settings?.auditReportsByYear?.[year],...patch.reportSettings,auditClientName:company};
   const script=path.join(__dirname,'render_source_report.py');
-  const result=spawnSync(pythonPath,[script,dbPath,projectId],{input:JSON.stringify({entries,reportSettings,auditEntity:company,sourceReport:imported?report:null,sourceDirectory:imported?path.join(dataDir,'reports',year):null,brandingLogoUrl:context.project.settings?.brandingLogoUrl}),maxBuffer:80*1024*1024,env:{...process.env,AUDIT_UPLOAD_ROOT:auditUploadDir,AUDIT_BRAND_ROOT:path.join(dataDir,'branding')}});
+  const result=await renderPdf(script,{entries,reportSettings,auditEntity:company,sourceReport:imported?report:null,sourceDirectory:imported?path.join(dataDir,'reports',year):null,brandingLogoUrl:context.project.settings?.brandingLogoUrl});
   if(result.status!==0)throw new Error('Audit PDF could not be generated. Check report data and server PDF dependencies.');
   res.setHeader('Content-Disposition',`attachment; filename="audit-report-${year.replace(/[^0-9]/g,'')||'all'}.pdf"`);return send(req,res,200,result.stdout,'application/pdf');
  }
@@ -181,7 +202,7 @@ async function handle(req,res){
   if (child === "audit-entries") {
     if (!session) return forbidden(req, res, "Audit access requires a signed-in user.");
     if (req.method === "GET") {
-      return send(req,res,200,reportListing(await allAuditEntries(dbPath,projectId),context,url.searchParams));
+      return send(req,res,200,await indexedReportListing(dataDir,context,url.searchParams));
     }
     if (req.method === "POST") {
       try {
@@ -262,7 +283,7 @@ async function persistAuditEntryImages(projectId, entry = {}) {
   return next;
 }
 const server=http.createServer((req,res)=>{
- const pending=queue.then(()=>handle(req,res));queue=pending.catch(()=>{});
+ const pending=queue.then(()=>handle(req,res));if(!['GET','HEAD'].includes(req.method)&&!req.url?.split('?')[0].endsWith('/audit-pdf'))queue=pending.catch(()=>{});
  pending.catch(error=>{if(!res.headersSent)send(req,res,error.statusCode||500,{message:error.statusCode?error.message:'Audit service error. Please retry or contact the administrator.'});else res.end();console.error(error.statusCode||500,error.message);});
 });
 if(existsSync(path.join(dataDir,'report-import.pending.json')))throw new Error('Incomplete report import; restore its private backup before starting.');
