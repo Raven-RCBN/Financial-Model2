@@ -14,7 +14,10 @@ import {
   seedAuditEntries,
 } from "./audit/audit-store.mjs";
 
-import { auditIdentity, applyAuditWrite, hashAuditPassword, verifyAuditPassword, auditApiAllowed } from "./audit/audit-permissions.mjs";
+import { auditIdentity, auditAssignees, validateAuditAssignees, applyAuditWrite, hashAuditPassword, verifyAuditPassword, auditApiAllowed } from "./audit/audit-permissions.mjs";
+
+import { prepareMobileWrite } from "./audit/mobile-sync.mjs";
+let auditRequestQueue = Promise.resolve();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.FM2_DB_PATH || path.join(__dirname, "data", "plantation-financial-model.db.json");
@@ -1670,7 +1673,7 @@ async function api(req, res, url) {
   }
   if (child === "audit-access") {
     if (!auditActor.userId) return forbidden(req, res);
-    if (req.method === "GET") return send(req, res, 200, {users: auditActor.admin ? auditUsers.map(({credential, ...user}) => user) : [], identity: auditActor}, "application/json; charset=utf-8", {cacheControl: "no-store"});
+    if (req.method === "GET") return send(req, res, 200, {users: auditActor.admin ? auditUsers.map(({credential, ...user}) => user) : [], identity: auditActor, assignees: auditAssignees(auditUsers, authUsers.map(user => user.userId))}, "application/json; charset=utf-8", {cacheControl: "no-store"});
     if (req.method !== "PUT") return notFound(req, res);
     if (!auditActor.admin) return forbidden(req, res, "Only administrators can assign audit permissions.");
     const patch = await bodyJson(req);
@@ -1691,7 +1694,22 @@ async function api(req, res, url) {
     auditDirectories[projectId] = users;
     await fs.writeFile(auditUsersPath, JSON.stringify(auditDirectories, null, 2) + "\n", {mode: 0o600});
     auditDirectoryCache = auditDirectories;
-    return send(req, res, 200, {users: users.map(({credential, ...user}) => user), identity: auditIdentity(currentSession(req), users)});
+    return send(req, res, 200, {users: users.map(({credential, ...user}) => user), identity: auditIdentity(currentSession(req), users), assignees: auditAssignees(users, authUsers.map(user => user.userId))});
+  }
+  if (child === "audit-sync" && req.method === "POST") {
+    try {
+      const request = await bodyJson(req);
+      const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === request.patch?.id);
+      const prepared = prepareMobileWrite(auditActor, request, existing);
+      if (prepared.duplicate) return send(req,res,200,{entry:prepared.entry,duplicate:true},"application/json; charset=utf-8",{cacheControl:"no-store"});
+      validateAuditAssignees(request.patch, auditUsers, authUsers.map(user => user.userId));
+      const persisted = await persistAuditEntryImages(projectId, prepared.entry);
+      const result = await createAuditEntry(dbPath,projectId,persisted);
+      return send(req,res,200,result,"application/json; charset=utf-8",{cacheControl:"no-store"});
+    } catch(error) {
+      if ([400,403,404,409].includes(error.statusCode)) return send(req,res,error.statusCode,{message:error.message},"application/json; charset=utf-8",{cacheControl:"no-store"});
+      throw error;
+    }
   }
   if (child === "audit-seed") {
     if (!auditActor.admin) return forbidden(req, res);
@@ -1715,6 +1733,7 @@ async function api(req, res, url) {
       try {
         const patch = await bodyJson(req);
         const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === patch.id);
+        validateAuditAssignees(patch, auditUsers, authUsers.map(user => user.userId));
         const authorized = applyAuditWrite(auditActor, patch, existing);
         const persistedPatch = await persistAuditEntryImages(projectId, authorized);
         const result = await createAuditEntry(dbPath, projectId, persistedPatch);
@@ -1994,8 +2013,26 @@ async function api(req, res, url) {
 async function staticFile(req, res, url) {
   const session = currentSession(req);
   let filePath = ["/", "/app", "/audit"].includes(url.pathname) ? (session?.role === "audit" ? "/audit.html" : "/index.html") : decodeURIComponent(url.pathname);
+  if (filePath.startsWith("/mobile-app/")) {
+    const name = filePath.slice("/mobile-app/".length) || "index.html";
+    if (!["index.html","app.js","styles.css","core.mjs","manifest.json","sw.js"].includes(name)) return notFound(req,res);
+    const data = await fs.readFile(path.join(__dirname,"mobile","web",name));
+    return send(req,res,200,data,mime[path.extname(name)] || "text/javascript; charset=utf-8",{cacheControl:"no-store"});
+  }
   if (session?.role === "audit") {
-    const staticAllowed = ["/audit.html", "/app.js", "/styles.css"].includes(filePath) || /^\/public\/[a-zA-Z0-9_.-]+\.(png|jpe?g|svg|webp)$/.test(filePath) || session.projectIds.some(id => filePath.startsWith(`/audit/uploads/${id}/`) && /^[-a-zA-Z0-9_./]+$/.test(filePath) && !filePath.includes(".."));
+    let referencedEvidence = false;
+    if (/^\/audit\/evidence\/[-a-zA-Z0-9_]+\.(png|jpe?g|webp)$/.test(filePath)) {
+      const pending = auditRequestQueue.then(async () => {
+        for (const projectId of session.projectIds) {
+          const entries = await allAuditEntries(dbPath, projectId);
+          if (entries.some(entry => entry.photoUrl === filePath || entry.observationImages?.some(image => image.url === filePath))) return true;
+        }
+        return false;
+      });
+      auditRequestQueue = pending.catch(() => {});
+      referencedEvidence = await pending;
+    }
+    const staticAllowed = referencedEvidence || ["/audit.html", "/app.js", "/styles.css"].includes(filePath) || /^\/public\/[a-zA-Z0-9_.-]+\.(png|jpe?g|svg|webp)$/.test(filePath) || session.projectIds.some(id => filePath.startsWith(`/audit/uploads/${safeFileSegment(id)}/`) && /^[-a-zA-Z0-9_./]+$/.test(filePath) && !filePath.includes(".."));
     if (!staticAllowed) return forbidden(req, res, "Audit accounts can access Audit only.");
   }
   filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, "");
@@ -2046,13 +2083,21 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/login") return await handleLogin(req, res, url);
     if (url.pathname === "/logout") return handleLogout(req, res);
+    if (url.pathname.startsWith("/mobile-app/")) return await staticFile(req,res,url);
     if (!hasValidSession(req)) {
       if (url.pathname.startsWith("/api/")) {
         return send(req, res, 401, { message: "Authentication required" }, "application/json; charset=utf-8", { cacheControl: "no-store" });
       }
       return sendLoginPage(req, res, 200, "", `${url.pathname}${url.search}`);
     }
-    if (url.pathname.startsWith("/api/")) return await api(req, res, url);
+    if (url.pathname.startsWith("/api/")) {
+      if (/\/audit-[a-z]+$/.test(url.pathname)) {
+        const pending = auditRequestQueue.then(()=>api(req,res,url));
+        auditRequestQueue = pending.catch(()=>{});
+        return await pending;
+      }
+      return await api(req,res,url);
+    }
     return await staticFile(req, res, url);
   } catch (error) {
     send(req, res, 500, { message: error.message }, "application/json; charset=utf-8", { cacheControl: "no-store" });

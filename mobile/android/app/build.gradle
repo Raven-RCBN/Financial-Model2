@@ -1,0 +1,10 @@
+plugins { id 'com.android.application' }
+android {
+ namespace 'ai.agrinexus.audit'
+ compileSdk 35
+ defaultConfig { applicationId 'ai.agrinexus.audit'; minSdk 26; targetSdk 35; versionCode 1; versionName '0.1.0-test' }
+ sourceSets { main { assets.srcDirs = ['../../web'] } }
+ compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+ buildTypes { debug { debuggable true }; release { minifyEnabled false } }
+}
+dependencies { implementation 'androidx.core:core:1.13.1' }

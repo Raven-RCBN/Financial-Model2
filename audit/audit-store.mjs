@@ -443,6 +443,7 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
     projectId: String(entry.projectId || projectId),
     auditYear: auditYearFromEntry(entry),
     createdBy: String(entry.createdBy || ""),
+    mobileOperations: Array.isArray(entry.mobileOperations) ? entry.mobileOperations.filter(item => item && typeof item.id === "string" && typeof item.userId === "string" && typeof item.digest === "string").map(({id,userId,digest})=>({id,userId,digest})) : [],
     entity: String(entry.entity || entry.companyName || ""),
     department: String(entry.department || "Unassigned"),
     area: String(entry.area || "SOP compliance"),

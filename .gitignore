@@ -48,3 +48,11 @@ yarn-error.log*
 
 # Dedicated audit login records (runtime data, never publish)
 data/audit-users.json
+
+# Android build and private provisioning artifacts
+/mobile/android/.gradle/
+/mobile/android/local.properties
+/mobile/android/**/build/
+/mobile/android/.kotlin/
+*.apk
+*.jks

@@ -726,6 +726,7 @@ async function saveAuditUserPermissions() {
   const result = await requestJson(`/api/projects/${PROJECT_ID}/audit-access`, {method: "PUT", body: JSON.stringify({users: state.auditUsers || []})});
   state.auditUsers = result.users;
   state.auditIdentity = result.identity;
+  state.auditAssignees = result.assignees || [];
 }
 
 function canAccessAudit() {
@@ -3115,13 +3116,27 @@ function readAuditActionDrafts() {
   });
 }
 
+function renderAuditAssignee(action = {}, draft = false) {
+  const users = state.auditAssignees || [];
+  const match = users.find(user => user.name === action.owner && user.email === action.email);
+  const ownerAttrs = draft ? 'data-action-field="owner"' : 'name="owner"';
+  const emailAttrs = draft ? 'data-action-field="email"' : 'name="email"';
+  return `<label class="field"><span>Responsible person</span><select data-audit-assignee ${ownerAttrs} required><option value="">${users.length ? 'Select an Audit user' : 'Add an active user in Audit User Directory'}</option>${users.map(user => `<option value="${escapeHtml(user.name)}" data-email="${escapeHtml(user.email)}" ${match?.id === user.id ? 'selected' : ''}>${escapeHtml(user.name)} · ${escapeHtml(user.email)}</option>`).join('')}</select>${action.owner && !match ? `<small>Previous assignment: ${escapeHtml(action.owner)}. Select an active Audit user to save changes.</small>` : ''}</label><label class="field"><span>Responsible person’s email</span><input ${emailAttrs} type="email" value="${escapeHtml(match?.email || '')}" readonly required /></label>`;
+}
+document.addEventListener('change', event => {
+  if (!event.target.matches('[data-audit-assignee]')) return;
+  const scope = event.target.closest('[data-audit-action-draft], form');
+  const input = scope?.querySelector('[data-action-field="email"], input[name="email"]');
+  if (input) input.value = event.target.selectedOptions[0]?.dataset.email || '';
+});
+
 function renderAuditActionDraft(action, index) {
   const input = (label, key, type = "text", required = true) => `<label class="field"><span>${label}</span><input data-action-field="${key}" type="${type}" value="${escapeHtml(action[key] || "")}" ${required ? "required" : ""} /></label>`;
   return `<section class="audit-action-card" data-audit-action-draft="${escapeHtml(action.id)}">
     <header><b>Corrective action ${index + 1}</b>${index ? '<button type="button" class="secondary-button" data-remove-audit-action>Remove action</button>' : ""}</header>
     <div class="audit-action-grid">
       <label class="field audit-action-description"><span>Corrective action</span><textarea data-action-field="description" rows="3" required placeholder="State the action and evidence required for closure.">${escapeHtml(action.description || "")}</textarea></label>
-      ${input("Responsible person", "owner")}${input("Responsible person’s email", "email", "email")}${input("Action due date", "dueDate", "date")}
+      ${renderAuditAssignee(action, true)}${input("Action due date", "dueDate", "date")}
       <label class="field"><span>Initial action status</span><input data-action-field="status" value="Open" readonly /></label>
     </div>
     <p>The assigned respondent can record replies in the report after this action is saved.</p>
@@ -3138,8 +3153,7 @@ function renderAuditActionTracking(entry) {
       <div class="audit-response-row"><span><b>Responsible person</b>${escapeHtml(action.owner || "Unassigned")}</span><span><b>Email</b>${escapeHtml(action.email || "Not assigned")}</span><span><b>Action due date</b>${auditDateLabel(action.dueDate)}</span><span><b>Status</b>${escapeHtml(action.status || "Open")}</span></div>
       ${auditPermission("recommend") ? `<details><summary>Edit corrective action / assignment</summary><form class="audit-update-action-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}"><div class="audit-action-grid">
         <label class="field audit-action-description"><span>Corrective action</span><textarea name="description" required>${escapeHtml(action.description)}</textarea></label>
-        <label class="field"><span>Responsible person</span><input name="owner" value="${escapeHtml(action.owner || "")}" required /></label>
-        <label class="field"><span>Email</span><input name="email" type="email" value="${escapeHtml(action.email || "")}" required /></label>
+        ${renderAuditAssignee(action)}
         <label class="field"><span>Action due date</span><input name="dueDate" type="date" value="${escapeHtml(action.dueDate || "")}" required /></label>
       </div><button type="submit" class="secondary-button">Save action changes</button><span role="status"></span></form></details>` : ""}
       <h4>Responses / replies</h4>
@@ -3158,8 +3172,7 @@ function renderAuditActionTracking(entry) {
   }).join("")}
   ${auditPermission("recommend") ? `<form class="audit-add-action-form" data-entry-id="${escapeHtml(entry.id)}"><h4>Add corrective action</h4><div class="audit-action-grid">
   <label class="field audit-action-description"><span>Recommendation / corrective action</span><textarea name="description" required></textarea></label>
-  <label class="field"><span>Responsible person</span><input name="owner" required /></label>
-  <label class="field"><span>Responsible email</span><input name="email" type="email" required /></label>
+  ${renderAuditAssignee()}
   <label class="field"><span>Action due date</span><input name="dueDate" type="date" required /></label>
   </div><button class="primary-button" type="submit">Save corrective action</button><span role="status"></span></form>` : ""}</section>`;
 }
@@ -3878,7 +3891,7 @@ function bindAuditEvents() {
       if (status) status.textContent = "Observation / Finding is required before saving.";
       return;
     }
-    const actionInputs = Array.from(document.querySelectorAll("[data-audit-action-draft] input, [data-audit-action-draft] textarea"));
+    const actionInputs = Array.from(document.querySelectorAll("[data-audit-action-draft] input, [data-audit-action-draft] textarea, [data-audit-action-draft] select"));
     if (actionInputs.some(input => !input.reportValidity())) return;
     const actions = readAuditActionDrafts();
     if (actions.some(action => !action.description || !action.owner || !action.email || !action.dueDate)) {
@@ -4249,6 +4262,7 @@ async function init() {
     state.projectData = await requestJson(`/api/projects/${PROJECT_ID}/audit-context`);
     const access = await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
     state.auditIdentity = access.identity;
+    state.auditAssignees = access.assignees || [];
     state.auditUsers = [];
     state.selectedAuditPanel = access.identity.create ? "entry" : "report";
     qsa('.module:not([data-view="audit"]), .view:not(#audit), .market-strip, .sidebar-card').forEach(element => element.remove());
@@ -4269,6 +4283,7 @@ async function init() {
   state.projectData = projectData;
   const access = await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
   state.auditIdentity = access.identity;
+    state.auditAssignees = access.assignees || [];
   state.auditUsers = access.users || [];
   applyBrandingLogo();
   applySessionUi();

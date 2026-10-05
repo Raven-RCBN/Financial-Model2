@@ -72,7 +72,24 @@ export function verifyAuditPassword(password, credential) {
 export function auditApiAllowed(session, pathname, method) {
   if (session?.role !== "audit") return true;
   if (pathname === "/api/session") return method === "GET";
-  const match = pathname.match(/^\/api\/projects\/([^/]+)\/(audit-context|audit-access|audit-entries|audit-pdf)$/);
+  const match = pathname.match(/^\/api\/projects\/([^/]+)\/(audit-context|audit-access|audit-entries|audit-pdf|audit-sync)$/);
   if (!match || !session.projectIds?.includes(match[1])) return false;
   return match[2] === "audit-context" || match[2] === "audit-access" ? method === "GET" : match[2] === "audit-entries" ? ["GET", "POST"].includes(method) : method === "POST";
+}
+
+// Assignment options expose only the active Audit directory, never FM2 accounts or credentials.
+export function auditAssignees(users, reservedNames = []) {
+  const excluded = new Set(['admin', ...reservedNames].map(name => String(name).toLowerCase()));
+  return users.filter(user => user.status === 'Active' && !excluded.has(String(user.name).toLowerCase()))
+    .map(({id,name,email,auditPermissions}) => ({id,name,email,canRespond:Boolean(auditPermissions?.respond)}));
+}
+export function validateAuditAssignees(patch, users, reservedNames = []) {
+  const choices = auditAssignees(users,reservedNames);
+  const actions = ['add-action','update-action'].includes(patch.operation) ? [patch.action] : !patch.operation ? (patch.actions || []) : [];
+  for (const action of actions) {
+    const user = choices.find(user => user.name === action?.owner && user.email.toLowerCase() === String(action?.email || '').toLowerCase());
+    if (!user) reject('Select an active responsible person from the Audit User Directory (excluding administrators). Refresh the directory if it has changed.',400);
+    action.owner = user.name;
+    action.email = user.email;
+  }
 }
