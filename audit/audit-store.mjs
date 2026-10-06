@@ -443,6 +443,9 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
     projectId: String(entry.projectId || projectId),
     auditYear: auditYearFromEntry(entry),
     createdBy: String(entry.createdBy || ""),
+    timeZone: String(entry.timeZone || ""),
+    creatorEmail: String(entry.creatorEmail || ''),
+    finalizedAt: String(entry.finalizedAt || ''),
     mobileOperations: Array.isArray(entry.mobileOperations) ? entry.mobileOperations.filter(item => item && typeof item.id === "string" && typeof item.userId === "string" && typeof item.digest === "string").map(({id,userId,digest})=>({id,userId,digest})) : [],
     entity: String(entry.entity || entry.companyName || ""),
     department: String(entry.department || "Unassigned"),
@@ -457,6 +460,8 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
     actions: Array.isArray(entry.actions) ? entry.actions.filter(action => action && typeof action === "object").map(action => ({
       id: String(action.id || randomUUID()),
       description: String(action.description || ""),
+      notificationRevision: String(action.notificationRevision || ''),
+      assignedAt: String(action.assignedAt || ''),
       owner: String(action.owner || ""),
       email: String(action.email || ""),
       dueDate: String(action.dueDate || ""),
@@ -469,8 +474,8 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
       })) : [],
     })) : [],
     observationImages,
-    impact: String(entry.impact || (entry.sourceReport ? "" : "Impact pending review.")),
-    recommendation: String(entry.recommendation || (entry.sourceReport ? "" : "Corrective action pending assignment.")),
+    impact: String(entry.impact || (entry.sourceReport || entry.status === "Draft" ? "" : "Impact pending review.")),
+    recommendation: String(entry.recommendation || (entry.sourceReport || entry.status === "Draft" ? "" : "Corrective action pending assignment.")),
     geo: geo && Number.isFinite(geo.latitude) && Number.isFinite(geo.longitude) ? geo : null,
     photoDataUrl: typeof entry.photoDataUrl === "string" && entry.photoDataUrl.startsWith("data:image/") ? entry.photoDataUrl : "",
     photoUrl: typeof entry.photoUrl === "string" && entry.photoUrl.startsWith("/") ? entry.photoUrl : "",
@@ -626,7 +631,7 @@ export async function allAuditEntries(dbPath, projectId, auditYear = "") {
 export async function createAuditEntry(dbPath, projectId, entry) {
   await seedAuditEntries(dbPath, projectId, entry.auditYear || "");
   const normalized = normalizeAuditEntry(entry, projectId);
-  if (!normalized.finding.trim()) {
+  if (normalized.status !== "Draft" && !normalized.finding.trim()) {
     const error = new Error("Observation / Finding is required");
     error.statusCode = 400;
     throw error;

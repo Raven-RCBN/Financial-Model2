@@ -4005,7 +4005,7 @@ p {
   padding: 12px 15px;
   border-bottom: 1px solid var(--line);
   display: grid;
-  grid-template-columns: 120px minmax(220px, 1fr) 100px auto;
+  grid-template-columns: 110px minmax(160px, 1fr) 130px 80px auto;
   gap: 10px;
   align-items: end;
 }

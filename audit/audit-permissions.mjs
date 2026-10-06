@@ -27,15 +27,46 @@ function responseImages(images=[]){
     return {dataUrl:image.dataUrl,name:String(image.name||'Action evidence').slice(0,200),description:String(image.description||'').slice(0,2000)};
   });
 }
-export function applyAuditWrite(identity, patch, existing) {
+export function auditToday(now = new Date(), timeZone = 'Asia/Kuala_Lumpur') {
+  return new Intl.DateTimeFormat('en-CA', {timeZone, year:'numeric', month:'2-digit', day:'2-digit'}).format(now);
+}
+export function actionLocked(action, options = {}) {
+  return validDate(action.dueDate) && action.dueDate < auditToday(options.now || new Date(), options.timeZone);
+}
+export function applyAuditWrite(identity, patch, existing, options = {}) {
   if (!identity.userId) reject("Sign in to update audits.");
-  const now = new Date().toISOString();
+  const now = (options.now || new Date()).toISOString();
+  if (options.drafts && (patch.status === 'Draft' && !existing || existing?.status === 'Draft')) {
+    if (existing?.sourceReport) reject('Issued reports cannot become drafts.');
+    if (!identity.create || existing && !identity.admin && existing.createdBy !== identity.userId) reject('Only the draft creator or administrator can edit this draft.');
+    if (patch.operation && patch.operation !== 'save-draft') reject('Edit and finalize this draft before updating actions.',400);
+    if (existing && patch.baseUpdatedAt !== existing.updatedAt) reject('This draft changed. Reopen it before saving.',409);
+    const status = patch.status || 'Draft';
+    if (!['Draft','Open'].includes(status)) reject('Select Open to finalize a draft.',400);
+    const fields = ['finding','impact','department','area','priority','location','reference','auditYear','owner','dueDate','entity','photoDataUrl','photoUrl','photoName','geo','observationImages'];
+    const next = {...existing,...Object.fromEntries(fields.filter(k=>k in patch).map(k=>[k,patch[k]])),id:existing?.id || patch.id,status,createdBy:existing?.createdBy || identity.userId,capturedAt:existing?.capturedAt || now,updatedAt:now};
+    const actions = patch.actions || existing?.actions || [];
+    if (!Array.isArray(actions) || actions.some(a=>!a || typeof a!=='object')) reject('Invalid corrective actions.',400);
+    if (actions.some(a=>a.description || a.owner || a.email || a.dueDate) && !identity.recommend) reject('Corrective action permission is required.');
+    next.actions = actions.map(a=>({id:a.id || randomUUID(),description:String(a.description||''),owner:String(a.owner||''),email:String(a.email||''),dueDate:String(a.dueDate||''),status:'Open',responses:[]}));
+    next.recommendation=next.actions.map(a=>a.description).join('\n\n');
+    if (status === 'Open') {
+      if (!String(next.finding || '').trim()) reject('Observation / Finding is required before finalizing.',400);
+      next.actions.forEach(validateAction);
+    }
+    return next;
+  }
+  if (options.drafts && patch.operation === 'update-action' && !identity.admin) {
+    const action=actionsFor(existing || {}).find(a=>a.id===patch.actionId);
+    if (action && actionLocked(action,options)) reject('The deadline has passed. Ask an administrator to extend it.');
+  }
   if (patch.operation === "reply") {
     if (!existing) reject("Finding not found.", 404);
     const actions = actionsFor(existing);
     const action = actions.find(action => action.id === patch.actionId);
     if (!action) reject("Action not found.", 404);
     if (!identity.admin && (!identity.respond || !identity.email || identity.email !== String(action.email).toLowerCase())) reject("Only the assigned respondent can reply to this action.");
+    if (options.drafts && !identity.admin && actionLocked(action,options)) reject('The due date has passed. Updates are locked; ask an administrator to extend the deadline.');
     if (!String(patch.text || "").trim()) reject("Response is required.", 400);
     if (patch.dueDate && !validDate(patch.dueDate)) reject("Invalid follow-up due date.", 400);
     if (!["Open", "In progress", "Closed"].includes(patch.status)) reject("Invalid action status.", 400);
@@ -91,9 +122,10 @@ export function auditAssignees(users, reservedNames = []) {
   return users.filter(user => user.status === 'Active' && !excluded.has(String(user.name).toLowerCase()))
     .map(({id,name,email,auditPermissions}) => ({id,name,email,canRespond:Boolean(auditPermissions?.respond)}));
 }
-export function validateAuditAssignees(patch, users, reservedNames = []) {
+export function validateAuditAssignees(patch, users, reservedNames = [], options = {}) {
+  if (options.drafts && patch.status === 'Draft' && (!patch.operation || patch.operation === 'save-draft')) return;
   const choices = auditAssignees(users,reservedNames);
-  const actions = ['add-action','update-action'].includes(patch.operation) ? [patch.action] : !patch.operation ? (patch.actions || []) : [];
+  const actions = ['add-action','update-action'].includes(patch.operation) ? [patch.action] : (!patch.operation || patch.operation === "save-draft") ? (patch.actions || []) : [];
   for (const action of actions) {
     const user = choices.find(user => user.name === action?.owner && user.email.toLowerCase() === String(action?.email || '').toLowerCase());
     if (!user) reject('Select an active responsible person from the Audit User Directory (excluding administrators). Refresh the directory if it has changed.',400);

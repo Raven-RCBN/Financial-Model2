@@ -1,3 +1,5 @@
+import {entryTimeZone} from './timezone.mjs';
+import {workflowOptions,enrollNotifications,notificationWorker} from './notifications.mjs';
 import {indexedReportListing,allStandaloneEntries as allAuditEntries} from './query-store.mjs';
 import {gzip} from 'node:zlib';
 import {promisify} from 'node:util';
@@ -20,6 +22,7 @@ const assetRoot=existsSync(path.join(__dirname,'audit'))?__dirname:path.dirname(
 process.env.AUDIT_DISABLE_SEED='1';
 if(process.env.AUDIT_MONGODB_URI)throw new Error('SQLite query indexing supports the JSON backend only; prepare a MongoDB query adapter before enabling MongoDB.');
 const dataDir=path.resolve(process.env.AUDIT_DATA_DIR || path.join(__dirname,'runtime'));
+const mailWorker=notificationWorker(dataDir);
 const auditUsersPath=path.join(dataDir,'audit-users.json');
 const dbPath=path.join(dataDir,'audit-context.json');
 const auditUploadDir=path.join(dataDir,'uploads');
@@ -98,7 +101,9 @@ async function handle(req,res){
  const match=url.pathname.match(/^\/api\/projects\/([^/]+)\/(audit-context|audit-access|audit-entries|audit-sync|audit-settings|audit-branding|audit-pdf|audit-source-report|audit-source-import)$/);
  if(!match||match[1]!==projectId)return notFound(req,res);
  const child=match[2],payload=context;
- const auditActor=auditIdentity(session,directories[projectId]||[]);
+ const auditActor={...auditIdentity(session,directories[projectId]||[]),timeZone:workflowOptions.timeZone};
+ if(auditActor.admin)auditActor.email=process.env.AUDIT_ADMIN_EMAIL || admin.email || '';
+ if(child==='audit-entries' && url.searchParams.get('notifications')==='status' && req.method==='GET'){if(!auditActor.admin)return forbidden(req,res);return send(req,res,200,mailWorker.status());}
  if(child==='audit-branding'){
   if(!auditActor.admin)return forbidden(req,res);
   if(req.method!=='PUT')return notFound(req,res);
@@ -139,7 +144,7 @@ async function handle(req,res){
   if(req.method!=='POST')return notFound(req,res);
   const patch=await bodyJson(req),year=String(patch.auditYear||'');
   const company=selectedCompany(context,patch.auditEntity||patch.company);
-  const entries=companyEntries(await allAuditEntries(dbPath,projectId,year),context,company);
+  const entries=companyEntries(await allAuditEntries(dbPath,projectId,year),context,company).filter(e=>e.status!=='Draft');
   if(!entries.length)return badRequest(req,res,'No findings for this company and report year.');
   const report=context.project.settings?.auditSourceReports?.[year];
   const imported=report?.companyName===company;
@@ -158,7 +163,7 @@ async function handle(req,res){
   }
   if (child === "audit-access") {
     if (!auditActor.userId) return forbidden(req, res);
-    if (req.method === "GET") return send(req, res, 200, {users: auditActor.admin ? auditUsers.map(({credential, ...user}) => user) : [], identity: auditActor, assignees: auditAssignees(auditUsers, [{userId:admin.name}].map(user => user.userId))}, "application/json; charset=utf-8", {cacheControl: "no-store"});
+    if (req.method === "GET") return send(req, res, 200, {users: auditActor.admin ? auditUsers.map(({credential, ...user}) => user) : [], identity: auditActor, notifications: mailWorker.status(), assignees: auditAssignees(auditUsers, [{userId:admin.name}].map(user => user.userId))}, "application/json; charset=utf-8", {cacheControl: "no-store"});
     if (req.method !== "PUT") return notFound(req, res);
     if (!auditActor.admin) return forbidden(req, res, "Only administrators can assign audit permissions.");
     const patch = await bodyJson(req);
@@ -179,7 +184,7 @@ async function handle(req,res){
     auditDirectories[projectId] = users;
     await atomicJson(auditUsersPath,auditDirectories);
 
-    return send(req, res, 200, {users: users.map(({credential, ...user}) => user), identity: auditIdentity(session, users), assignees: auditAssignees(users, [{userId:admin.name}].map(user => user.userId))});
+    return send(req, res, 200, {users: users.map(({credential, ...user}) => user), identity: {...auditIdentity(session, users),email:auditActor.email,timeZone:workflowOptions.timeZone}, assignees: auditAssignees(users, [{userId:admin.name}].map(user => user.userId))});
   }
   if (child === "audit-sync" && req.method === "POST") {
     try {
@@ -187,12 +192,14 @@ async function handle(req,res){
       const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === request.patch?.id);
       if(!existing)selectedCompany(context,request.patch.entity);
       if(existing?.sourceReport&&request.patch.operation==='update-finding')return forbidden(req,res,'Issued report observations are preserved. Add a new finding or corrective action instead.');
-      const prepared = prepareMobileWrite(auditActor, request, existing);
+      const prepared = prepareMobileWrite(auditActor, request, existing, {...workflowOptions,timeZone:entryTimeZone(existing)});
       if(!existing){prepared.entry.entity=selectedCompany(context,request.patch.entity);delete prepared.entry.sourceReport;}
       if (prepared.duplicate) return send(req,res,200,{entry:prepared.entry,duplicate:true},"application/json; charset=utf-8",{cacheControl:"no-store"});
-      validateAuditAssignees(request.patch, auditUsers, [{userId:admin.name}].map(user => user.userId));
-      const persisted = await persistAuditEntryImages(projectId, prepared.entry);
+      validateAuditAssignees(request.patch, auditUsers, [admin.name], workflowOptions);
+      if(existing?.status==='Draft')validateAuditAssignees({...prepared.entry,operation:undefined},auditUsers,[admin.name],workflowOptions);
+      const persisted = await persistAuditEntryImages(projectId, enrollNotifications(prepared.entry,existing,auditActor));
       const result = await createAuditEntry(dbPath,projectId,persisted);
+      setImmediate(()=>mailWorker.run());
       return send(req,res,200,result,"application/json; charset=utf-8",{cacheControl:"no-store"});
     } catch(error) {
       if ([400,403,404,409].includes(error.statusCode)) return send(req,res,error.statusCode,{message:error.message},"application/json; charset=utf-8",{cacheControl:"no-store"});
@@ -202,20 +209,23 @@ async function handle(req,res){
   if (child === "audit-entries") {
     if (!session) return forbidden(req, res, "Audit access requires a signed-in user.");
     if (req.method === "GET") {
-      return send(req,res,200,await indexedReportListing(dataDir,context,url.searchParams));
+      const listing=await indexedReportListing(dataDir,context,url.searchParams);
+      return send(req,res,200,{...listing,items:listing.items.map(entry=>({...entry,timeZone:entryTimeZone(entry)}))});
     }
     if (req.method === "POST") {
       try {
         const patch = await bodyJson(req);
         const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === patch.id);
-        if(!existing){patch.entity=selectedCompany(context,patch.entity);delete patch.sourceReport;}
-        validateAuditAssignees(patch, auditUsers, [{userId:admin.name}].map(user => user.userId));
-        const authorized = applyAuditWrite(auditActor, patch, existing);
-        const persistedPatch = await persistAuditEntryImages(projectId, authorized);
+        if(!existing || existing.status==='Draft'){patch.entity=selectedCompany(context,patch.entity);delete patch.sourceReport;}
+        validateAuditAssignees(patch, auditUsers, [admin.name], workflowOptions);
+        const authorized = applyAuditWrite(auditActor, patch, existing, {...workflowOptions,timeZone:entryTimeZone(existing)});
+        if(existing?.status==='Draft')validateAuditAssignees({...authorized,operation:undefined},auditUsers,[admin.name],workflowOptions);
+        const persistedPatch = await persistAuditEntryImages(projectId, enrollNotifications(authorized,existing,auditActor));
         const result = await createAuditEntry(dbPath, projectId, persistedPatch);
+        setImmediate(()=>mailWorker.run());
         return send(req, res, 201, result, "application/json; charset=utf-8", { cacheControl: "no-store" });
       } catch (error) {
-        if ([400, 403, 404].includes(error.statusCode)) return send(req, res, error.statusCode, {message: error.message});
+        if ([400, 403, 404, 409].includes(error.statusCode)) return send(req, res, error.statusCode, {message: error.message});
         throw error;
       }
     }
@@ -295,3 +305,6 @@ const server=http.createServer((req,res)=>{
 if(existsSync(path.join(dataDir,'report-import.pending.json')))throw new Error('Incomplete report import; restore its private backup before starting.');
 await Promise.all(['audit-context.json','audit-users.json','audit-entries.json','admin-user.json'].map(file=>readJson(path.join(dataDir,file))));
 server.listen(port,'127.0.0.1',()=>console.log(`Standalone Audit listening on 127.0.0.1:${port}`));
+
+setInterval(()=>mailWorker.run(),60000).unref();
+setImmediate(()=>mailWorker.run());
