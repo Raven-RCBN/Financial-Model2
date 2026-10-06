@@ -3,7 +3,7 @@ export function auditIdentity(session, users = []) {
   const user = users.find(user => user.name === session?.userId);
   const admin = session?.role === "admin";
   const active = user && user.status === "Active";
-  return { userId: session?.userId || "", email: active ? String(user.email || "").toLowerCase() : "", admin,
+  return { companyScope: user?.companyScope === "selected" ? "selected" : "all", companies: Array.isArray(user?.companies) ? user.companies : [], userId: session?.userId || "", email: active ? String(user.email || "").toLowerCase() : "", admin,
     create: admin || Boolean(active && user.auditPermissions?.create),
     recommend: admin || Boolean(active && user.auditPermissions?.recommend),
     respond: admin || Boolean(active && user.auditPermissions?.respond) };
@@ -117,10 +117,13 @@ export function auditApiAllowed(session, pathname, method) {
 }
 
 // Assignment options expose only the active Audit directory, never FM2 accounts or credentials.
+export function auditUserInCompany(user, company) {
+  return user?.admin || user?.companyScope !== 'selected' || Boolean(company && user.companies?.includes(company));
+}
 export function auditAssignees(users, reservedNames = []) {
   const excluded = new Set(['admin', ...reservedNames].map(name => String(name).toLowerCase()));
   return users.filter(user => user.status === 'Active' && !excluded.has(String(user.name).toLowerCase()))
-    .map(({id,name,email,auditPermissions}) => ({id,name,email,canRespond:Boolean(auditPermissions?.respond)}));
+    .map(({id,name,email,auditPermissions,companyScope,companies}) => ({id,name,email,canRespond:Boolean(auditPermissions?.respond),companyScope:companyScope==='selected'?'selected':'all',companies:Array.isArray(companies)?companies:[]}));
 }
 export function validateAuditAssignees(patch, users, reservedNames = [], options = {}) {
   if (options.drafts && patch.status === 'Draft' && (!patch.operation || patch.operation === 'save-draft')) return;
@@ -128,6 +131,7 @@ export function validateAuditAssignees(patch, users, reservedNames = [], options
   const actions = ['add-action','update-action'].includes(patch.operation) ? [patch.action] : (!patch.operation || patch.operation === "save-draft") ? (patch.actions || []) : [];
   for (const action of actions) {
     const user = choices.find(user => user.name === action?.owner && user.email.toLowerCase() === String(action?.email || '').toLowerCase());
+    if (user && options.company && (!auditUserInCompany(user,options.company) || !user.canRespond)) reject('Select a responsible person with respondent permission for this company.',400);
     if (!user) reject('Select an active responsible person from the Audit User Directory (excluding administrators). Refresh the directory if it has changed.',400);
     action.owner = user.name;
     action.email = user.email;

@@ -14,7 +14,7 @@ await page.evaluate(()=>navigator.serviceWorker.ready);
 await context.setOffline(true);
 await page.reload();await page.getByRole('heading',{name:'Make every action count.'}).waitFor();
 await page.locator('.bottom [data-nav=capture]').click();
-await page.locator('[name=department]').fill('Mobile test');await page.locator('[name=finding]').fill(findingTitle);await page.locator('[name=impact]').fill('Access blocked after rainfall.');await page.locator('[name=location]').fill('Block 12');
+await page.locator('[name=department]').selectOption({index:0});await page.locator('[name=finding]').fill(findingTitle);await page.locator('[name=impact]').fill('Access blocked after rainfall.');await page.locator('[name=location]').fill('Block 12');
 await page.locator('#images').setInputFiles({name:'evidence.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});
 await page.waitForFunction(()=>document.querySelector('#draftPhotos img'));
 await page.reload();await page.locator('.bottom [data-nav=capture]').click();assert.equal(await page.locator('[name=finding]').inputValue(),findingTitle);assert.equal(await page.locator('#draftPhotos img').count(),1);

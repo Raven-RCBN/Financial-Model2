@@ -4652,3 +4652,35 @@ h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
 
 .audit-action-form-footer .audit-reply-status { margin: 0; }
 .audit-tabs button { white-space: nowrap; }
+
+/* Company setup uses dedicated section spacing and consistent form controls. */
+.audit-company-panel { padding: 24px; margin-top: 24px; }
+.audit-company-panel > header { padding: 0 0 20px; border: 0; }
+.audit-company-panel h3, .audit-company-panel h4 { margin: 0 0 8px; font-weight: 500; }
+.audit-company-panel p { margin: 0; color: var(--muted); line-height: 1.6; }
+.audit-company-picker { display: flex; gap: 16px; align-items: end; padding-bottom: 24px; }
+.audit-company-picker .field { flex: 1; max-width: 520px; }
+.audit-settings-section { padding: 24px 0; border-top: 1px solid var(--line); }
+.audit-settings-section > p { margin-bottom: 16px; }
+.audit-settings-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px 24px; }
+.audit-settings-three { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.audit-settings-heading { display: flex; gap: 24px; align-items: end; justify-content: space-between; margin-bottom: 20px; }
+.audit-settings-heading .field { min-width: 160px; }
+.audit-company-panel .field { display: grid; gap: 8px; min-width: 0; }
+.audit-company-panel input, .audit-company-panel select, .audit-company-panel textarea { width: 100%; box-sizing: border-box; border: 1px solid #d3dfd0; border-radius: 8px; background: #fff; color: var(--ink); padding: 12px 14px; font: inherit; }
+.audit-company-panel input, .audit-company-panel select, .audit-company-picker button { min-height: 46px; }
+.audit-company-panel textarea { resize: vertical; min-height: 150px; line-height: 1.6; }
+.audit-company-panel input[readonly] { background: #f4f8f3; }
+.audit-company-panel .field-hint { margin-top: 12px; font-size: 13px; }
+.audit-company-save { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 0; }
+.audit-user-company-scope { margin: 20px 0; display: grid; gap: 16px; }
+.audit-user-company-scope > .field { max-width: 420px; }
+.audit-user-company-scope fieldset { display: flex; gap: 16px; flex-wrap: wrap; padding: 16px; }
+.audit-user-company-scope fieldset[hidden] { display: none; }
+@media (max-width: 800px) {
+ .audit-company-panel { padding: 18px; }
+ .audit-settings-grid, .audit-settings-three { grid-template-columns: 1fr; }
+ .audit-company-picker, .audit-settings-heading { flex-direction: column; align-items: stretch; }
+ .audit-company-picker .field { max-width: none; }
+ .audit-company-save { flex-direction: column; align-items: stretch; }
+}

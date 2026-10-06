@@ -56,7 +56,10 @@ def build(payload):
     company=report['companyName'] if report else payload.get('auditEntity',settings.get('auditClientName',''))
     story=[paragraph(title,styles['Title']),paragraph(company,styles['Heading2'])]
     if report:story.append(paragraph('The preceding pages preserve the original issued audit report. This appendix contains subsequent records and workflow updates from the Audit webapp.',styles['AuditBody']))
-    else:story.append(paragraph('Private & Confidential | '+str(len(entries))+' findings',styles['AuditBody']))
+    else:
+        story.append(paragraph((settings.get('auditConfidentiality') or 'Private & Confidential')+' | '+str(len(entries))+' findings',styles['AuditBody']))
+        for label,key in [('Location','auditLocation'),('Prepared by','auditPreparedBy'),('Period start','auditPeriodStart'),('Period end','auditPeriodEnd'),('Issue date','auditIssueDate')]:
+            if settings.get(key):story.append(paragraph(label+': '+settings[key],styles['AuditBody']))
 
     for e in additional+tracked:
         story.extend([Spacer(1,14),paragraph(e.get('reference') or e.get('department'),styles['Heading2'])])

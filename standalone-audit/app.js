@@ -182,7 +182,7 @@ function normalizeAuditList(values, fallback = []) {
 
 function normalizeAuditYears(values) {
   const configured = Array.isArray(values) ? values : [];
-  return normalizeAuditList([...configured, ...DEFAULT_AUDIT_YEARS], [])
+  return normalizeAuditList(configured, DEFAULT_AUDIT_YEARS)
     .filter((year) => /^\d{4}$/.test(year))
     .sort((a, b) => Number(b) - Number(a));
 }
@@ -196,7 +196,7 @@ function normalizeAuditSetup(setup = {}) {
 }
 
 function auditSetupSettings() {
-  return normalizeAuditSetup(projectSettings().auditSetup || {});
+  return normalizeAuditSetup(selectedCompanyProfile().auditSetup || projectSettings().auditSetup || {});
 }
 
 function auditYears() {
@@ -211,25 +211,12 @@ function auditAreas() {
   return auditSetupSettings().areas;
 }
 
+function selectedCompanyProfile(name = auditEntityValue()) {
+  return projectSettings().auditCompanyProfiles?.[name] || {};
+}
 function auditReportSettings(year = state.auditYear || "2025") {
-  const yearKey = String(year);
-  const saved=projectSettings().auditReportsByYear?.[yearKey];
-  if(saved && sourceReportForSelection())return {...saved,auditClientName:auditEntityValue()};
-  const base = AUDIT_REPORT_DEFAULTS_BY_YEAR[yearKey] || AUDIT_REPORT_DEFAULTS;
-  const custom = projectSettings().auditReport || {};
-  if (yearKey === "2025") return { ...base, ...custom,auditClientName:auditEntityValue() };
-  const fallbackTitle = AUDIT_REPORT_DEFAULTS_BY_YEAR[yearKey]?.auditReportTitle || `${yearKey} Internal Audit Report`;
-  const customTitle = custom.auditReportTitle && custom.auditReportTitle !== AUDIT_REPORT_DEFAULTS.auditReportTitle
-    ? custom.auditReportTitle
-    : fallbackTitle;
-  return {
-    ...base,
-    auditReportTitle: customTitle,
-    auditClientName: auditEntityValue(),
-    auditLocation: custom.auditLocation || base.auditLocation,
-    auditPreparedBy: custom.auditPreparedBy || base.auditPreparedBy,
-    auditConfidentiality: custom.auditConfidentiality || base.auditConfidentiality,
-  };
+  const profile=selectedCompanyProfile();
+  return {auditReportTitle:`${year} Internal Audit Report`,auditClientName:auditEntityValue(),auditLocation:'',auditPreparedBy:'Agrinexus International',auditPeriodStart:'',auditPeriodEnd:'',auditIssueDate:'',auditConfidentiality:'Private & Confidential',...profile.auditReport,...profile.auditReportsByYear?.[year],auditClientName:auditEntityValue()};
 }
 
 function auditPermission(key) {
@@ -369,7 +356,7 @@ function renderAuditDirectory() {
   if (!target) return;
   if (state.currentSession?.role !== "admin") { target.innerHTML = ""; return; }
   const users = state.auditUsers || [];
-  target.innerHTML = users.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${[["create", "Audit creator"], ["recommend", "Corrective action author"], ["respond", "Assigned respondent"]].filter(([key]) => user.auditPermissions?.[key]).map(([, label]) => escapeHtml(label)).join("<br>") || "No permissions"}</td><td>${escapeHtml(user.status)}</td><td><button class="secondary-button" data-edit-audit-user="${escapeHtml(user.id)}">Edit</button> <button class="secondary-button" data-delete-audit-user="${escapeHtml(user.id)}">Remove</button></td></tr>`).join("") || '<tr><td colspan="5">No audit users assigned. Add an audit user below.</td></tr>';
+  target.innerHTML = users.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${[["create", "Audit creator"], ["recommend", "Corrective action author"], ["respond", "Assigned respondent"]].filter(([key]) => user.auditPermissions?.[key]).map(([, label]) => escapeHtml(label)).join("<br>") || "No permissions"}</td><td>${user.companyScope==='selected'?escapeHtml((user.companies||[]).join(", ")):"All companies"}</td><td>${escapeHtml(user.status)}</td><td><button class="secondary-button" data-edit-audit-user="${escapeHtml(user.id)}">Edit</button> <button class="secondary-button" data-delete-audit-user="${escapeHtml(user.id)}">Remove</button></td></tr>`).join("") || '<tr><td colspan="6">No audit users assigned. Add an audit user below.</td></tr>';
   const form = qs("#auditUserForm");
   form.onsubmit = async event => {
     event.preventDefault();
@@ -379,7 +366,9 @@ function renderAuditDirectory() {
     if (!name || !email) return;
     const feedback = qs("#auditDirectoryStatus");
     if (users.some(user => user.name === name && user.id !== values.id)) { feedback.textContent = "This audit username is already assigned."; return; }
-    const user = {id: values.id || crypto.randomUUID(), name, email, ...(values.password ? {password: values.password} : {}), status: values.status, auditPermissions: {create: values.create === "on", recommend: values.recommend === "on", respond: values.respond === "on"}};
+    const companies=Array.from(form.querySelectorAll('[name="companies"]:checked')).map(input=>input.value);
+    if(values.companyScope==='selected'&&!companies.length){feedback.textContent='Select at least one company or choose All companies.';return;}
+    const user = {companyScope:values.companyScope,companies:values.companyScope==='selected'?companies:[],id: values.id || crypto.randomUUID(), name, email, ...(values.password ? {password: values.password} : {}), status: values.status, auditPermissions: {create: values.create === "on", recommend: values.recommend === "on", respond: values.respond === "on"}};
     const previous = structuredClone(users);
     state.auditUsers = [...users.filter(item => item.id !== user.id), user];
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
@@ -387,11 +376,16 @@ function renderAuditDirectory() {
     catch (error) { state.auditUsers = previous; feedback.textContent = error.message; }
     finally { submit.disabled = false; }
   };
-  qs("#cancelAuditUserEdit").onclick = () => { form.reset(); form.elements.id.value = ""; };
+  form.elements.companyScope.onchange=()=>qs('#auditUserCompanies').hidden=form.elements.companyScope.value!=='selected';
+  form.elements.companyScope.onchange();
+  qs("#cancelAuditUserEdit").onclick = () => { form.reset(); form.elements.id.value = "";form.elements.companyScope.onchange(); };
   qsa("[data-edit-audit-user]").forEach(button => button.onclick = () => {
     const user = users.find(item => item.id === button.dataset.editAuditUser);
     for (const key of ["id", "name", "email", "status"]) form.elements[key].value = user[key] || "";
     for (const key of ["create", "recommend", "respond"]) form.elements[key].checked = Boolean(user.auditPermissions?.[key]);
+    form.elements.companyScope.value=user.companyScope==='selected'?'selected':'all';
+    form.querySelectorAll('[name="companies"]').forEach(input=>input.checked=(user.companies||[]).includes(input.value));
+    qs('#auditUserCompanies').hidden=form.elements.companyScope.value!=='selected';
     form.elements.password.value = "";
     form.elements.name.focus();
   });
@@ -546,7 +540,15 @@ function auditEntityValue(){
   if(!companies.includes(state.auditEntity))state.auditEntity=state.projectData?.company?.name || companies[0] || '';
   return state.auditEntity;
 }
-function updateAuditEntity(value){state.auditEntity=auditCompanyNames().includes(value)?value:state.projectData.company.name;}
+function updateAuditEntity(value){
+ state.auditEntity=auditCompanyNames().includes(value)?value:state.projectData.company.name;
+ state.auditYearCounts={};
+ const setup=auditSetupSettings();if(!setup.years.includes(state.auditYear))state.auditYear=setup.years[0];
+ if(!setup.departments.includes(state.auditDraftFields.department))state.auditDraftFields.department='';
+ if(!setup.areas.includes(state.auditDraftFields.area))state.auditDraftFields.area='';
+ const users=companyAssignees();
+ for(const action of state.auditDraftFields.actions || [])if(!users.some(u=>u.name===action.owner&&u.email===action.email)){action.owner='';action.email='';}
+}
 function renderAuditEntityCard(){return `<article class="panel audit-context-panel"><label class="field"><span>Company / estate</span><select id="auditEntity">${auditCompanyNames().map(name=>`<option value="${escapeHtml(name)}" ${name===auditEntityValue()?'selected':''}>${escapeHtml(name)}</option>`).join('')}</select></label><p>Data entry and reports use this company. Administrators can add companies in Audit management.</p></article>`;}
 function sourceReportForSelection(){const report=projectSettings().auditSourceReports?.[state.auditYear];return report?.companyName===auditEntityValue()?report:null;}
 function renderSourceDetails(entry){
@@ -579,8 +581,11 @@ function readAuditActionDrafts() {
   });
 }
 
-function renderAuditAssignee(action = {}, draft = false) {
-  const users = state.auditAssignees || [];
+function companyAssignees(company = auditEntityValue()) {
+  return (state.auditAssignees || []).filter(user=>user.canRespond && (user.companyScope!=='selected' || user.companies?.includes(company)));
+}
+function renderAuditAssignee(action = {}, draft = false, company = auditEntityValue()) {
+  const users = companyAssignees(company);
   const match = users.find(user => user.name === action.owner && user.email === action.email);
   const ownerAttrs = draft ? 'data-action-field="owner"' : 'name="owner"';
   const emailAttrs = draft ? 'data-action-field="email"' : 'name="email"';
@@ -613,7 +618,7 @@ function renderAuditActionTracking(entry) {
       <div class="audit-response-row"><span><b>Responsible person</b>${escapeHtml(action.owner || "Unassigned")}</span><span><b>Email</b>${escapeHtml(action.email || "Not assigned")}</span><span><b>Action due date</b>${auditDateLabel(action.dueDate)} · ${escapeHtml(entry.timeZone || "Africa/Lagos")}</span><span><b>Status</b>${escapeHtml(action.status || "Open")}</span></div>
       ${auditPermission("recommend") && (!auditActionLocked(action) || state.currentSession?.role === "admin") ? `<details><summary>Edit corrective action / assignment</summary><form class="audit-update-action-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}"><div class="audit-action-grid">
         <label class="field audit-action-description"><span>Corrective action</span><textarea name="description" required>${escapeHtml(action.description)}</textarea></label>
-        ${renderAuditAssignee(action)}
+        ${renderAuditAssignee(action,false,entry.entity || auditEntityValue())}
         <label class="field"><span>Action due date</span><input name="dueDate" type="date" value="${escapeHtml(action.dueDate || "")}" required /></label>
       </div><div class="audit-action-form-footer"><span role="status"></span><button type="submit" class="secondary-button">Save action changes</button></div></form></details>` : ""}
       <h4>Assignee updates</h4>
@@ -632,7 +637,7 @@ function renderAuditActionTracking(entry) {
   }).join("")}
   ${auditPermission("recommend") ? `<form class="audit-add-action-form" data-entry-id="${escapeHtml(entry.id)}"><h4>Add corrective action</h4><div class="audit-action-grid">
   <label class="field audit-action-description"><span>Recommendation / corrective action</span><textarea name="description" required></textarea></label>
-  ${renderAuditAssignee()}
+  ${renderAuditAssignee({},false,entry.entity || auditEntityValue())}
   <label class="field"><span>Action due date</span><input name="dueDate" type="date" required /></label>
   </div><div class="audit-action-form-footer"><span role="status"></span><button class="primary-button" type="submit">Save corrective action</button></div></form>` : ""}</section>`;
 }
@@ -1534,7 +1539,7 @@ function renderStandaloneAdmin(){
   <article class="mc-panel user-directory-panel">
                       <header><div><span class="eyebrow">Audit Users &amp; Roles</span><h3>Audit User Directory</h3></div><span class="status-pill">Admin only</span></header>
                       <p class="audit-directory-note">Manage audit assignments in this standalone Audit workspace. Administrators have all audit permissions. Create dedicated Audit sign-in accounts here. Audit users can access only the Audit module. Set a password when adding a user; leave it blank when editing to keep the current password.</p>
-                      <div class="directory-scroll"><table class="permission-table user-directory"><thead><tr><th>Sign-in username</th><th>Email</th><th>Audit roles</th><th>Status</th><th>Actions</th></tr></thead><tbody id="auditUserDirectory"></tbody></table></div>
+                      <div class="directory-scroll"><table class="permission-table user-directory"><thead><tr><th>Sign-in username</th><th>Email</th><th>Audit roles</th><th>Companies</th><th>Status</th><th>Actions</th></tr></thead><tbody id="auditUserDirectory"></tbody></table></div>
                       <form id="auditUserForm" class="audit-directory-form">
                         <h4>Add / edit audit user</h4><input type="hidden" name="id" />
                         <div class="audit-action-grid">
@@ -1543,28 +1548,68 @@ function renderStandaloneAdmin(){
                           <label class="field"><span>Password (new or reset)</span><input name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" /></label>
                           <label class="field"><span>Status</span><select name="status"><option>Active</option><option>Inactive</option></select></label>
                         </div>
+                        <div class="audit-user-company-scope"><label class="field"><span>Company access</span><select name="companyScope"><option value="all">All companies</option><option value="selected">Selected companies</option></select></label><fieldset id="auditUserCompanies" hidden><legend>Companies this user can access</legend>${auditCompanyNames().map(name=>`<label class="audit-permission-option"><input type="checkbox" name="companies" value="${escapeHtml(name)}" /> ${escapeHtml(name)}</label>`).join('')}</fieldset></div>
                         <fieldset><legend>Audit roles — select one or more</legend>
                           <label class="audit-permission-option"><input type="checkbox" name="create" /> Audit creator — create observations and findings</label>
                           <label class="audit-permission-option"><input type="checkbox" name="recommend" /> Corrective action author — add actions, owners and due dates</label>
                           <label class="audit-permission-option"><input type="checkbox" name="respond" /> Assigned respondent — reply and update status on actions assigned to their email</label>
                         </fieldset>
-                        <button class="primary-button" type="submit">Save audit user</button> <button class="secondary-button" type="button" id="cancelAuditUserEdit">Clear</button>
+                        <div class="audit-action-form-footer"><span></span><button class="primary-button" type="submit">Save audit user</button> <button class="secondary-button" type="button" id="cancelAuditUserEdit">Clear</button></div>
                         <p id="auditDirectoryStatus" role="status"></p>
                       </form>
                     </article>
-  <form id="auditBrandForm" class="panel"><h3>Audit branding</h3><label class="field"><span>Company logo (PNG, JPG or WebP, up to 3 MB)</span><input id="auditBrandFile" type="file" accept="image/png,image/jpeg,image/webp" required></label><button class="primary-button">Save logo</button><p id="brandStatus" role="status"></p></form><form id="auditSettingsForm" class="panel"><h3>Company &amp; project</h3><div class="audit-action-grid">${field('companyName','Company',state.projectData.company.name)}${field('projectName','Project',state.projectData.project.name)}</div>
-  <label class="field"><span>Available companies (one per line)</span><textarea name="auditCompanies">${escapeHtml(auditCompanyNames().join('\n'))}</textarea></label>
-  <h3>Audit setup</h3><div class="audit-action-grid">${[['years','Report years'],['departments','Departments'],['areas','Audit areas']].map(([key,label])=>`<label class="field"><span>${label} (one per line)</span><textarea name="${key}">${escapeHtml(setup[key].join('\n'))}</textarea></label>`).join('')}</div>
-  <h3>Report settings</h3><div class="audit-action-grid">${Object.entries(report).map(([key,value])=>field(key,key.replace(/^audit/,'').replace(/([A-Z])/g,' $1').trim(),value)).join('')}</div>
-  <button class="primary-button">Save Audit settings</button><p id="settingsStatus" role="status"></p></form>`;
+  <form id="auditBrandForm" class="panel"><h3>Audit branding</h3><label class="field"><span>Company logo (PNG, JPG or WebP, up to 3 MB)</span><input id="auditBrandFile" type="file" accept="image/png,image/jpeg,image/webp" required></label><button class="primary-button">Save logo</button><p id="brandStatus" role="status"></p></form><section id="companySettingsPanel"></section>`;
   renderAuditDirectory();
   qs('#auditBrandForm').onsubmit=async event=>{event.preventDefault();try{const file=qs('#auditBrandFile').files[0];state.projectData=await requestJson(`/api/projects/${PROJECT_ID}/audit-branding`,{method:'PUT',body:JSON.stringify({dataUrl:await readFileAsDataUrl(file)})});applyBrandingLogo();qs('#brandStatus').textContent='Audit logo saved.';}catch(error){qs('#brandStatus').textContent=error.message;}};
-  qs('#auditSettingsForm').onsubmit=async event=>{
-    event.preventDefault();const values=Object.fromEntries(new FormData(event.target));
-    const auditSetup=Object.fromEntries(['years','departments','areas'].map(key=>[key,values[key].split('\n').map(x=>x.trim()).filter(Boolean)]));
-    const auditReport=Object.fromEntries(Object.keys(report).map(key=>[key,values[key]]));
-    try{state.projectData=await requestJson(`/api/projects/${PROJECT_ID}/audit-settings`,{method:'PUT',body:JSON.stringify({companyName:values.companyName,projectName:values.projectName,auditSetup,auditReport,auditCompanies:values.auditCompanies.split('\n').map(v=>v.trim()).filter(Boolean)})});qs('#settingsStatus').textContent='Audit settings saved.';}catch(error){qs('#settingsStatus').textContent=error.message;}
-  };
+  renderCompanySettings();
+}
+const companyReportFields=[['auditReportTitle','Report title'],['auditClientName','Audited company'],['auditLocation','Location'],['auditPreparedBy','Prepared by'],['auditPeriodStart','Period start'],['auditPeriodEnd','Period end'],['auditIssueDate','Issue date'],['auditConfidentiality','Confidentiality']];
+let companyEditor=null;
+function startCompanyEditor(name, isNew=false){
+ const year=String(new Date().getFullYear());
+ const p=isNew?{name:'',projectName:'',auditSetup:{years:[year],departments:['General'],areas:['SOP compliance']},auditReport:{auditPreparedBy:'Agrinexus International',auditConfidentiality:'Private & Confidential'},auditReportsByYear:{}}:structuredClone(projectSettings().auditCompanyProfiles[name]);
+ companyEditor={profile:p,isNew,year:p.auditSetup.years.includes(state.auditYear)?state.auditYear:p.auditSetup.years[0],dirtyReports:{}};
+ renderCompanySettings();
+}
+function captureCompanyEditor(){
+ const form=qs('#auditSettingsForm');if(!form)return;
+ const values=Object.fromEntries(new FormData(form)),p=companyEditor.profile;
+ p.name=values.companyName.trim();p.projectName=values.projectName.trim();
+ p.auditSetup=Object.fromEntries(['years','departments','areas'].map(key=>[key,values[key].split('\n').map(v=>v.trim()).filter(Boolean)]));
+ companyEditor.dirtyReports[companyEditor.year]=Object.fromEntries(companyReportFields.map(([key])=>[key,values[key] || '']));
+}
+function renderCompanySettings(){
+ if(!companyEditor){startCompanyEditor(auditEntityValue());return;}
+ const {profile:p,isNew,year}=companyEditor;
+ const report={auditReportTitle:`${year} Internal Audit Report`,...p.auditReport,...p.auditReportsByYear?.[year],...companyEditor.dirtyReports[year],auditClientName:p.name};
+ const field=(key,label,value,type='text',readonly=false)=>`<label class="field"><span>${label}</span><input name="${key}" type="${type}" value="${escapeHtml(value||'')}" ${readonly?'readonly':''} /></label>`;
+ qs('#companySettingsPanel').innerHTML=`<article class="panel audit-company-panel"><header><div><span class="eyebrow">Company setup</span><h3>Companies &amp; audit details</h3><p>Maintain each company’s audit options and report details separately.</p></div></header>
+ <div class="audit-company-picker"><label class="field"><span>Select company to configure</span><select id="companySettingsSelect">${isNew?'<option value="">New company</option>':''}${auditCompanyNames().map(name=>`<option ${name===p.name?'selected':''}>${escapeHtml(name)}</option>`).join('')}</select></label><button type="button" class="secondary-button" id="addAuditCompany">Add company</button></div>
+ <form id="auditSettingsForm">
+ <section class="audit-settings-section"><h4>Company details</h4><div class="audit-settings-grid">${field('companyName','Company name',p.name,'text',!isNew)}${field('projectName','Project / estate name',p.projectName)}</div>${!isNew?'<p class="field-hint">Company names stay linked to their existing audit records. Use Add company to create another company.</p>':''}</section>
+ <section class="audit-settings-section"><h4>Data Entry options</h4><p>One option per line. These dropdown choices apply only to this company.</p><div class="audit-settings-grid audit-settings-three">${[['years','Report years'],['departments','Departments'],['areas','Audit areas']].map(([key,label])=>`<label class="field"><span>${label}</span><textarea name="${key}" rows="6" required>${escapeHtml(p.auditSetup[key].join('\n'))}</textarea></label>`).join('')}</div></section>
+ <section class="audit-settings-section"><div class="audit-settings-heading"><div><h4>Report details</h4><p>Saved separately for each company and report year.</p></div><label class="field"><span>Report year to configure</span><select id="companyReportYear">${[...new Set([...p.auditSetup.years,year])].map(y=>`<option ${y===year?'selected':''}>${escapeHtml(y)}</option>`).join('')}</select></label></div><div class="audit-settings-grid">${companyReportFields.map(([key,label])=>field(key,label,report[key],['auditPeriodStart','auditPeriodEnd','auditIssueDate'].includes(key)?'date':'text',key==='auditClientName')).join('')}</div></section>
+ <div class="audit-action-form-footer audit-company-save"><p id="settingsStatus" role="status"></p><button class="primary-button" type="submit">${isNew?'Create company':'Save company settings'}</button></div></form></article>`;
+ qs('#companySettingsSelect').onchange=event=>startCompanyEditor(event.target.value);
+ qs('#addAuditCompany').onclick=()=>startCompanyEditor('',true);
+ qs('#companyReportYear').onchange=event=>{const next=event.target.value;captureCompanyEditor();companyEditor.year=next;renderCompanySettings();};
+ qs('#auditSettingsForm [name=years]').onchange=()=>{
+  captureCompanyEditor();
+  const years=companyEditor.profile.auditSetup.years;
+  companyEditor.dirtyReports=Object.fromEntries(Object.entries(companyEditor.dirtyReports).filter(([y])=>years.includes(y)));
+  if(years.length&&!years.includes(companyEditor.year))companyEditor.year=years[0];
+  renderCompanySettings();
+ };
+ qs('#auditSettingsForm [name=companyName]').oninput=event=>qs('#auditSettingsForm [name=auditClientName]').value=event.target.value;
+ qs('#auditSettingsForm').onsubmit=async event=>{
+  event.preventDefault();captureCompanyEditor();const button=event.target.querySelector('[type=submit]');button.disabled=true;
+  try{
+   const result=await requestJson(`/api/projects/${PROJECT_ID}/audit-settings`,{method:'PUT',body:JSON.stringify({newCompany:companyEditor.isNew,reportYear:companyEditor.year,companyProfile:{...companyEditor.profile,auditReport:companyEditor.dirtyReports[companyEditor.year],editedReports:companyEditor.dirtyReports}})});
+   state.projectData=result;companyEditor.isNew=false;companyEditor.profile=structuredClone(result.project.settings.auditCompanyProfiles[companyEditor.profile.name]);companyEditor.dirtyReports={};
+   if(companyEditor.profile.name===auditEntityValue())updateAuditEntity(auditEntityValue());
+   const savedName=companyEditor.profile.name;renderStandaloneAdmin();qs('#settingsStatus').textContent=`Settings saved for ${savedName}.`;
+  }catch(error){qs('#settingsStatus').textContent=error.message;button.disabled=false;}
+ };
 }
 async function init(){
  state.currentSession=await requestJson('/api/session');
@@ -1576,6 +1621,7 @@ async function init(){
  qsa('[data-screen]').forEach(button=>button.onclick=()=>showScreen(button.dataset.screen));
  qsa('[data-audit-panel]').forEach(button=>{button.hidden=button.dataset.auditPanel==='entry'&&!auditPermission('create');button.onclick=()=>{state.selectedAuditPanel=button.dataset.auditPanel;showScreen('audit');};});
  state.selectedAuditPanel=auditPermission('create')?'entry':'report';
+ updateAuditEntity(auditEntityValue());
  await renderAudit();
 }
 init().catch(error=>{qs('#auditWorkspace').textContent=error.message;});

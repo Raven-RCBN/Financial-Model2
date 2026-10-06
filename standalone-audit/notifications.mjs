@@ -4,7 +4,7 @@ import {randomUUID, createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {entryTimeZone,locationTimeZone,fallbackTimeZone} from './timezone.mjs';
-import {auditToday} from '../audit/audit-permissions.mjs';
+import {auditToday,auditUserInCompany} from '../audit/audit-permissions.mjs';
 const email = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value || '');
 export const workflowOptions = {drafts:true,timeZone:fallbackTimeZone};
 // Validate the configured IANA zone at startup, rather than fail during a write.
@@ -31,7 +31,7 @@ export function notificationJobs(entries, directories, adminEmail, now = new Dat
     for(const action of entry.actions || []){
       if(!action.notificationRevision || !action.assignedAt || !email(action.email))continue;
       const assignee=users.find(u=>u.name===action.owner && u.status==='Active' && u.email.toLowerCase()===action.email.toLowerCase());
-      if(!assignee)continue;
+      if(!assignee || !auditUserInCompany(assignee,entry.entity))continue;
       const types=['assigned'];
       const days=Math.round((Date.parse(action.dueDate)-Date.parse(today))/86400000);
       if(entry.status!=='Closed' && action.status!=='Closed'){

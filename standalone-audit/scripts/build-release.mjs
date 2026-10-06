@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const out=path.resolve(process.argv[2]||path.join(repo,'outputs/audit-release'));
 await fs.mkdir(out,{recursive:false});
-for(const name of ['timezone.mjs','notifications.mjs','send_mail.py','server.mjs','login-page.mjs','report-data.mjs','query-store.mjs','query_index.py','render_source_report.py','app.js','styles.css','index.html'])await fs.copyFile(path.join(repo,'standalone-audit',name),path.join(out,name));
+for(const name of ['company-config.mjs','timezone.mjs','notifications.mjs','send_mail.py','server.mjs','login-page.mjs','report-data.mjs','query-store.mjs','query_index.py','render_source_report.py','app.js','styles.css','index.html'])await fs.copyFile(path.join(repo,'standalone-audit',name),path.join(out,name));
 let server=await fs.readFile(path.join(out,'server.mjs'),'utf8');server=server.replaceAll("'../audit/","'./audit/");await fs.writeFile(path.join(out,'server.mjs'),server);
 const notifications=path.join(out,'notifications.mjs');await fs.writeFile(notifications,(await fs.readFile(notifications,'utf8')).replaceAll("'../audit/","'./audit/"));
 for(const name of ['audit-permissions.mjs','audit-store.mjs','mobile-sync.mjs','render_audit_pdf.py']){await fs.mkdir(path.join(out,'audit'),{recursive:true});await fs.copyFile(path.join(repo,'audit',name),path.join(out,'audit',name));}
