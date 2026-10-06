@@ -589,7 +589,7 @@ function renderAuditActionDraft(action, index) {
       ${renderAuditAssignee(action, true)}${input("Action due date", "dueDate", "date")}
       <label class="field"><span>Initial action status</span><input data-action-field="status" value="Open" readonly /></label>
     </div>
-    <p>After saving, the assignee can add progress updates and photos under Assignee updates in the report.</p>
+    <p>After saving, the assignee can add progress updates and photos under Assignee updates in View &amp; Report.</p>
   </section>`;
 }
 
@@ -607,19 +607,18 @@ function renderAuditActionTracking(entry) {
         <label class="field audit-action-description"><span>Corrective action</span><textarea name="description" required>${escapeHtml(action.description)}</textarea></label>
         ${renderAuditAssignee(action)}
         <label class="field"><span>Action due date</span><input name="dueDate" type="date" value="${escapeHtml(action.dueDate || "")}" required /></label>
-      </div><button type="submit" class="secondary-button">Save action changes</button><span role="status"></span></form></details>` : ""}
+      </div><div class="audit-action-form-footer"><span role="status"></span><button type="submit" class="secondary-button">Save action changes</button></div></form></details>` : ""}
       <h4>Assignee updates</h4>
       ${action.responseDueDate ? `<p class="audit-action-badge audit-action-${followup.tone}">Follow-up due: ${auditDateLabel(action.responseDueDate)} · ${escapeHtml(followup.label)}</p>` : ""}
       ${(action.responses || []).map(reply => `<div class="audit-action-reply"><b>${escapeHtml(reply.author || "Recorded response")}</b><small>${escapeHtml(reply.email || "")} · ${escapeHtml(auditUpdateTime(reply.createdAt))} · Follow-up due: ${auditDateLabel(reply.dueDate)}</small><p class="multiline-text">${escapeHtml(reply.text)}</p>${reply.status?`<p>Status: ${escapeHtml(reply.status)}</p>`:""}${renderAuditObservationImages(reply.images||[])}</div>`).join("") || "<p>No updates recorded yet.</p>"}
       ${canReplyToAuditAction(action) ? `<form class="audit-action-reply-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}">
+        <p class="audit-update-note">Updating as ${escapeHtml(state.currentSession.userId)}. Date and time are recorded automatically when you save.</p>
         <div class="audit-action-grid">
-          <p>Updating as ${escapeHtml(state.currentSession.userId)}. Date and time are recorded automatically when you save.</p>
-
           <label class="field"><span>Response / follow-up due date</span><input name="dueDate" type="date" value="${escapeHtml(action.responseDueDate || "")}" /></label>
           <label class="field"><span>Action status</span><select name="status">${["Open", "In progress", "Closed"].map(status => `<option ${status === action.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
           <label class="field audit-action-description"><span>Progress update</span><textarea name="text" rows="2" required></textarea></label>
-          <div class="field audit-action-description audit-update-photos"><span>Photo evidence (up to 8 photos)</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple data-reply-files aria-label="Upload action photos" /><button type="button" class="secondary-button" data-reply-camera>Take photo</button><input type="file" accept="image/*" capture="environment" data-reply-camera-file hidden /><div data-reply-previews class="audit-observation-images"></div></div>
-        </div><button class="primary-button" type="submit">Save update</button><span role="status" class="audit-reply-status"></span>
+          <div class="field audit-action-description audit-update-photos"><span>Photo evidence (up to 8 photos)</span><div class="audit-update-photo-actions"><button type="button" class="secondary-button" data-reply-upload>Upload photos</button><button type="button" class="secondary-button" data-reply-camera>Take photo</button></div><input type="file" accept="image/jpeg,image/png,image/webp" multiple data-reply-files aria-label="Upload action photos" hidden /><input type="file" accept="image/*" capture="environment" data-reply-camera-file hidden /><small data-reply-photo-count>No photos selected</small><div data-reply-previews class="audit-observation-images"></div></div>
+        </div><div class="audit-action-form-footer"><span role="status" class="audit-reply-status"></span><button class="primary-button" type="submit">Save update</button></div>
       </form>` : "<p>Replies are limited to the assigned respondent and administrators.</p>"}
     </section>`;
   }).join("")}
@@ -627,7 +626,7 @@ function renderAuditActionTracking(entry) {
   <label class="field audit-action-description"><span>Recommendation / corrective action</span><textarea name="description" required></textarea></label>
   ${renderAuditAssignee()}
   <label class="field"><span>Action due date</span><input name="dueDate" type="date" required /></label>
-  </div><button class="primary-button" type="submit">Save corrective action</button><span role="status"></span></form>` : ""}</section>`;
+  </div><div class="audit-action-form-footer"><span role="status"></span><button class="primary-button" type="submit">Save corrective action</button></div></form>` : ""}</section>`;
 }
 
 function captureAuditDraftFields() {
@@ -1238,9 +1237,10 @@ async function replyPhoto(file){
 function bindReplyPhotos(){
  document.querySelectorAll('.audit-action-reply-form').forEach(form=>{
  const feedback=form.querySelector('.audit-reply-status');form._replyImages=[];
- const preview=()=>{form.querySelector('[data-reply-previews]').innerHTML=form._replyImages.map((im,i)=>`<figure><img src="${im.dataUrl}" alt="Action evidence ${i+1}" /><figcaption>${escapeHtml(im.name)}</figcaption><button type="button" data-remove-reply-photo="${i}">Remove photo</button></figure>`).join('');form.querySelectorAll('[data-remove-reply-photo]').forEach(b=>b.onclick=()=>{form._replyImages.splice(Number(b.dataset.removeReplyPhoto),1);preview();});};
+ const preview=()=>{feedback.textContent=form._replyImages.length?'Photos ready to save with your update.':'';form.querySelector('[data-reply-photo-count]').textContent=form._replyImages.length?`${form._replyImages.length} of 8 photos selected`:'No photos selected';form.querySelector('[data-reply-previews]').innerHTML=form._replyImages.map((im,i)=>`<figure><img src="${im.dataUrl}" alt="Action evidence ${i+1}" /><figcaption>${escapeHtml(im.name)}</figcaption><button type="button" data-remove-reply-photo="${i}">Remove photo</button></figure>`).join('');form.querySelectorAll('[data-remove-reply-photo]').forEach(b=>b.onclick=()=>{form._replyImages.splice(Number(b.dataset.removeReplyPhoto),1);preview();});};
  const add=async files=>{if(form._readingPhotos)return;form._readingPhotos=true;try{if(form._replyImages.length+files.length>8)throw new Error('Use up to 8 photos per update.');const images=await Promise.all(Array.from(files,replyPhoto));form._replyImages.push(...images);preview();feedback.textContent='Photos ready to save with your update.';}catch(e){feedback.textContent=e.message;}finally{form._readingPhotos=false;}};
  form.querySelectorAll('[data-reply-files],[data-reply-camera-file]').forEach(input=>input.onchange=()=>{add(input.files);input.value='';});
+ form.querySelector('[data-reply-upload]').onclick=()=>form.querySelector('[data-reply-files]').click();
  form.querySelector('[data-reply-camera]').onclick=async()=>{
   if(!navigator.mediaDevices?.getUserMedia){form.querySelector('[data-reply-camera-file]').click();return;}
   const dialog=document.createElement('dialog');dialog.className='audit-update-camera';dialog.innerHTML='<p>Take action evidence photo</p><video autoplay playsinline muted></video><div><button type="button" data-capture>Capture photo</button><button type="button" data-close>Cancel</button></div><p role="status">Starting camera…</p>';document.body.append(dialog);dialog.showModal();let stream;
