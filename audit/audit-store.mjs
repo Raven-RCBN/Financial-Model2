@@ -464,6 +464,8 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
       responseDueDate: String(action.responseDueDate || ""),
       responses: Array.isArray(action.responses) ? action.responses.filter(reply => reply && typeof reply === "object").map(reply => ({
         id: String(reply.id || randomUUID()), text: String(reply.text || ""), author: String(reply.author || ""), email: String(reply.email || ""), dueDate: String(reply.dueDate || ""), createdAt: String(reply.createdAt || now),
+        status: ["Open","In progress","Closed"].includes(reply.status)?reply.status:"",
+        images: Array.isArray(reply.images)?reply.images.map(image=>({url:typeof image.url==='string'&&image.url.startsWith('/audit/uploads/')?image.url:'',dataUrl:typeof image.dataUrl==='string'&&image.dataUrl.startsWith('data:image/')?image.dataUrl:'',name:String(image.name||''),description:String(image.description||'')})).filter(image=>image.url||image.dataUrl).slice(0,8):[],
       })) : [],
     })) : [],
     observationImages,

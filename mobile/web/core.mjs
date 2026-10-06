@@ -12,7 +12,7 @@ export function applyLocal(entries,op,user){
  if(p.operation==='add-action'&&!entry.actions.some(a=>a.id===p.action.id))entry.actions.push({...p.action,status:'Open',responses:[]});
  const action=entry.actions.find(a=>a.id===p.actionId);
  if(p.operation==='update-action'&&action)Object.assign(action,p.action);
- if(p.operation==='reply'&&action){action.responses=[...(action.responses||[]),{id:op.operationId,text:p.text,author:user,dueDate:p.dueDate,createdAt:op.createdAt}];action.status=p.status;action.responseDueDate=p.dueDate;}
+ if(p.operation==='reply'&&action){action.responses=[...(action.responses||[]),{id:op.operationId,text:p.text,author:user,dueDate:p.dueDate,createdAt:op.createdAt,status:p.status,images:p.images||[]}];action.status=p.status;action.responseDueDate=p.dueDate;}
  if(entry.actions.length)entry.status=entry.actions.every(a=>a.status==='Closed')?'Closed':entry.actions.some(a=>a.status!=='Open')?'In progress':'Open';
  return next;
 }

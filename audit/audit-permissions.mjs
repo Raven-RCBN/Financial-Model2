@@ -20,6 +20,13 @@ export function actionsFor(entry) {
   if (!entry.recommendation || entry.recommendation === "Corrective action pending assignment.") return [];
   return [{id: "legacy", description: entry.recommendation, owner: entry.owner || "", email: "", dueDate: entry.dueDate || "", status: entry.status || "Open", responses: []}];
 }
+function responseImages(images=[]){
+  if(!Array.isArray(images)||images.length>8)reject('An action update supports up to 8 photos.',400);
+  return images.map(image=>{
+    if(!image||typeof image.dataUrl!=='string'||!/^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(image.dataUrl)||image.dataUrl.length>4*1024*1024)reject('Use JPEG, PNG or WebP photos up to 3 MB each.',400);
+    return {dataUrl:image.dataUrl,name:String(image.name||'Action evidence').slice(0,200),description:String(image.description||'').slice(0,2000)};
+  });
+}
 export function applyAuditWrite(identity, patch, existing) {
   if (!identity.userId) reject("Sign in to update audits.");
   const now = new Date().toISOString();
@@ -32,7 +39,7 @@ export function applyAuditWrite(identity, patch, existing) {
     if (!String(patch.text || "").trim()) reject("Response is required.", 400);
     if (patch.dueDate && !validDate(patch.dueDate)) reject("Invalid follow-up due date.", 400);
     if (!["Open", "In progress", "Closed"].includes(patch.status)) reject("Invalid action status.", 400);
-    const updated = actions.map(item => item.id !== action.id ? item : {...item, status: patch.status, responseDueDate: patch.dueDate || "", responses: [...(item.responses || []), {id: randomUUID(), text: patch.text.trim(), author: identity.userId, email: identity.email, dueDate: patch.dueDate || "", createdAt: now}]});
+    const updated = actions.map(item => item.id !== action.id ? item : {...item, status: patch.status, responseDueDate: patch.dueDate || "", responses: [...(item.responses || []), {id: randomUUID(), text: patch.text.trim(), author: identity.userId, email: identity.email, dueDate: patch.dueDate || "", createdAt: now, status: patch.status, images: responseImages(patch.images)}]});
     return {...existing, actions: updated, status: updated.every(action => action.status === "Closed") ? "Closed" : updated.some(action => action.status !== "Open") ? "In progress" : "Open", updatedAt: now};
   }
   if (patch.operation === "update-action") {

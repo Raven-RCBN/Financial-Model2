@@ -69,7 +69,11 @@ def build(payload):
                 if img:story.extend([img,paragraph(item.get('description') or item.get('name') or 'Evidence',styles['AuditBody'])])
         for n,a in enumerate(e.get('actions',[]),1):
             story.extend([paragraph('Corrective action '+str(n),styles['Heading3']),paragraph(a.get('description'),styles['AuditBody']),paragraph('Responsible person: '+a.get('owner','')+' | Email: '+a.get('email','')+' | Due: '+a.get('dueDate','')+' | Status: '+a.get('status',''),styles['AuditBody'])])
-            for r in a.get('responses',[]):story.extend([paragraph('Reply by '+r.get('author','')+' | '+r.get('createdAt','')+' | Follow-up due: '+r.get('dueDate',''),styles['Heading3']),paragraph(r.get('text'),styles['AuditBody'])])
+            for r in a.get('responses',[]):
+                story.extend([paragraph('Update by '+r.get('author','')+' | '+r.get('createdAt','')+' | Status: '+r.get('status','')+' | Follow-up due: '+r.get('dueDate',''),styles['Heading3']),paragraph(r.get('text'),styles['AuditBody'])])
+                for item in r.get('images',[]):
+                    img=evidence_image(item)
+                    if img:story.extend([img,paragraph(item.get('description') or item.get('name') or 'Action evidence',styles['AuditBody'])])
     buffer=BytesIO();SimpleDocTemplate(buffer,pagesize=(width,height),leftMargin=55,rightMargin=55,topMargin=55,bottomMargin=55).build(story)
     writer=PdfWriter();
     if reader:writer.append(reader)

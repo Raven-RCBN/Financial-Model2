@@ -589,9 +589,11 @@ function renderAuditActionDraft(action, index) {
       ${renderAuditAssignee(action, true)}${input("Action due date", "dueDate", "date")}
       <label class="field"><span>Initial action status</span><input data-action-field="status" value="Open" readonly /></label>
     </div>
-    <p>The assigned respondent can record replies in the report after this action is saved.</p>
+    <p>After saving, the assignee can add progress updates and photos under Assignee updates in the report.</p>
   </section>`;
 }
+
+function auditUpdateTime(value){return value?new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'long'}).format(new Date(value)):'';}
 
 function renderAuditActionTracking(entry) {
   return `<section class="audit-action-tracking"><h4>Corrective action monitoring</h4>${auditActionsFor(entry).map((action, index) => {
@@ -606,17 +608,18 @@ function renderAuditActionTracking(entry) {
         ${renderAuditAssignee(action)}
         <label class="field"><span>Action due date</span><input name="dueDate" type="date" value="${escapeHtml(action.dueDate || "")}" required /></label>
       </div><button type="submit" class="secondary-button">Save action changes</button><span role="status"></span></form></details>` : ""}
-      <h4>Responses / replies</h4>
+      <h4>Assignee updates</h4>
       ${action.responseDueDate ? `<p class="audit-action-badge audit-action-${followup.tone}">Follow-up due: ${auditDateLabel(action.responseDueDate)} · ${escapeHtml(followup.label)}</p>` : ""}
-      ${(action.responses || []).map(reply => `<div class="audit-action-reply"><b>${escapeHtml(reply.author || "Recorded response")}</b><small>${escapeHtml(reply.email || "")} · ${escapeHtml(reply.createdAt || "")} · Follow-up due: ${auditDateLabel(reply.dueDate)}</small><p class="multiline-text">${escapeHtml(reply.text)}</p></div>`).join("") || "<p>No responses recorded.</p>"}
+      ${(action.responses || []).map(reply => `<div class="audit-action-reply"><b>${escapeHtml(reply.author || "Recorded response")}</b><small>${escapeHtml(reply.email || "")} · ${escapeHtml(auditUpdateTime(reply.createdAt))} · Follow-up due: ${auditDateLabel(reply.dueDate)}</small><p class="multiline-text">${escapeHtml(reply.text)}</p>${reply.status?`<p>Status: ${escapeHtml(reply.status)}</p>`:""}${renderAuditObservationImages(reply.images||[])}</div>`).join("") || "<p>No updates recorded yet.</p>"}
       ${canReplyToAuditAction(action) ? `<form class="audit-action-reply-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}">
         <div class="audit-action-grid">
-          <p>Replying as ${escapeHtml(state.currentSession.userId)}</p>
+          <p>Updating as ${escapeHtml(state.currentSession.userId)}. Date and time are recorded automatically when you save.</p>
 
           <label class="field"><span>Response / follow-up due date</span><input name="dueDate" type="date" value="${escapeHtml(action.responseDueDate || "")}" /></label>
           <label class="field"><span>Action status</span><select name="status">${["Open", "In progress", "Closed"].map(status => `<option ${status === action.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
-          <label class="field audit-action-description"><span>Response / reply</span><textarea name="text" rows="2" required></textarea></label>
-        </div><button class="primary-button" type="submit">Save response</button><span role="status" class="audit-reply-status"></span>
+          <label class="field audit-action-description"><span>Progress update</span><textarea name="text" rows="2" required></textarea></label>
+          <div class="field audit-action-description audit-update-photos"><span>Photo evidence (up to 8 photos)</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple data-reply-files aria-label="Upload action photos" /><button type="button" class="secondary-button" data-reply-camera>Take photo</button><input type="file" accept="image/*" capture="environment" data-reply-camera-file hidden /><div data-reply-previews class="audit-observation-images"></div></div>
+        </div><button class="primary-button" type="submit">Save update</button><span role="status" class="audit-reply-status"></span>
       </form>` : "<p>Replies are limited to the assigned respondent and administrators.</p>"}
     </section>`;
   }).join("")}
@@ -1226,6 +1229,28 @@ async function handleAuditPhotoSelection(event, sourceType) {
   if (sourceType === "camera") captureAuditGeoInBackground();
 }
 
+async function replyPhoto(file){
+ if(!/^image\//.test(file.type))throw new Error('Select an image file.');
+ const dataUrl=await readFileAsDataUrl(file),image=new Image();image.src=dataUrl;await image.decode();
+ const scale=Math.min(1,1600/Math.max(image.width,image.height)),canvas=document.createElement('canvas');canvas.width=Math.round(image.width*scale);canvas.height=Math.round(image.height*scale);canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+ return {dataUrl:canvas.toDataURL('image/jpeg',0.82),name:file.name||'Action photo.jpg',description:''};
+}
+function bindReplyPhotos(){
+ document.querySelectorAll('.audit-action-reply-form').forEach(form=>{
+ const feedback=form.querySelector('.audit-reply-status');form._replyImages=[];
+ const preview=()=>{form.querySelector('[data-reply-previews]').innerHTML=form._replyImages.map((im,i)=>`<figure><img src="${im.dataUrl}" alt="Action evidence ${i+1}" /><figcaption>${escapeHtml(im.name)}</figcaption><button type="button" data-remove-reply-photo="${i}">Remove photo</button></figure>`).join('');form.querySelectorAll('[data-remove-reply-photo]').forEach(b=>b.onclick=()=>{form._replyImages.splice(Number(b.dataset.removeReplyPhoto),1);preview();});};
+ const add=async files=>{if(form._readingPhotos)return;form._readingPhotos=true;try{if(form._replyImages.length+files.length>8)throw new Error('Use up to 8 photos per update.');const images=await Promise.all(Array.from(files,replyPhoto));form._replyImages.push(...images);preview();feedback.textContent='Photos ready to save with your update.';}catch(e){feedback.textContent=e.message;}finally{form._readingPhotos=false;}};
+ form.querySelectorAll('[data-reply-files],[data-reply-camera-file]').forEach(input=>input.onchange=()=>{add(input.files);input.value='';});
+ form.querySelector('[data-reply-camera]').onclick=async()=>{
+  if(!navigator.mediaDevices?.getUserMedia){form.querySelector('[data-reply-camera-file]').click();return;}
+  const dialog=document.createElement('dialog');dialog.className='audit-update-camera';dialog.innerHTML='<p>Take action evidence photo</p><video autoplay playsinline muted></video><div><button type="button" data-capture>Capture photo</button><button type="button" data-close>Cancel</button></div><p role="status">Starting camera…</p>';document.body.append(dialog);dialog.showModal();let stream;
+  const close=()=>{stream?.getTracks().forEach(t=>t.stop());dialog.remove();};dialog.querySelector('[data-close]').onclick=close;dialog.oncancel=e=>{e.preventDefault();close();};
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});if(!dialog.isConnected){close();return;}const video=dialog.querySelector('video');video.srcObject=stream;await video.play();dialog.querySelector('[role=status]').textContent='';dialog.querySelector('[data-capture]').onclick=async()=>{if(!video.videoWidth)return;const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;canvas.getContext('2d').drawImage(video,0,0);const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.85));await add([new File([blob],'Action photo.jpg',{type:'image/jpeg'})]);close();};}
+  catch(e){close();feedback.textContent='Camera unavailable. Use Upload action photos or the device camera picker.';form.querySelector('[data-reply-camera-file]').click();}
+ };
+ });
+}
+
 function bindAuditEvents() {
   document.querySelectorAll(".audit-add-action-form, .audit-update-action-form").forEach(form => form.addEventListener("submit", async event => {
     event.preventDefault();
@@ -1250,8 +1275,10 @@ function bindAuditEvents() {
   document.querySelectorAll(".audit-action-reply-form").forEach(form => form.addEventListener("submit", async event => {
     event.preventDefault();
     const feedback = form.querySelector(".audit-reply-status");
-    const button = form.querySelector("button");
+    const button = form.querySelector('button[type="submit"]');
     const values = Object.fromEntries(new FormData(form));
+    if(form._readingPhotos){feedback.textContent='Wait for photos to finish loading.';return;}
+    values.images=form._replyImages||[];
     if (!values.text.trim()) { feedback.textContent = "Enter a respondent and response."; return; }
     const entry = state.auditEntries.find(item => item.id === form.dataset.entryId);
     if (!entry) return;
@@ -1261,6 +1288,8 @@ function bindAuditEvents() {
       renderAudit();
     } catch (error) { feedback.textContent = error.message || "Response could not be saved."; button.disabled = false; }
   }));
+
+  bindReplyPhotos();
 
   qsa("#auditTabs button").forEach((button) => {
     button.classList.toggle("active", button.dataset.auditPanel === state.selectedAuditPanel);

@@ -280,6 +280,12 @@ async function persistAuditEntryImages(projectId, entry = {}) {
       return item;
     }));
   }
+  if(Array.isArray(next.actions))next.actions=await Promise.all(next.actions.map(async action=>({...action,responses:await Promise.all((action.responses||[]).map(async reply=>({...reply,images:await Promise.all((reply.images||[]).map(async image=>{
+    if(!image.dataUrl)return image;
+    const url=await saveAuditDataUrlImage(image.dataUrl,projectId,auditYear,image.name||'action-update');
+    if(!url)fail('Action evidence could not be saved.');
+    return {url,name:image.name||'Action evidence',description:image.description||''};
+  }))})))})));
   return next;
 }
 const server=http.createServer((req,res)=>{
