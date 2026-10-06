@@ -1563,9 +1563,8 @@ function renderStandaloneAdmin(){
                         <p id="auditDirectoryStatus" role="status"></p>
                       </form>
                     </article>
-  <form id="auditBrandForm" class="panel"><h3>Audit branding</h3><label class="field"><span>Company logo (PNG, JPG or WebP, up to 3 MB)</span><input id="auditBrandFile" type="file" accept="image/png,image/jpeg,image/webp" required></label><button class="primary-button">Save logo</button><p id="brandStatus" role="status"></p></form><section id="companySettingsPanel"></section>`;
+  <section id="companySettingsPanel"></section>`;
   renderAuditDirectory();
-  qs('#auditBrandForm').onsubmit=async event=>{event.preventDefault();try{const file=qs('#auditBrandFile').files[0];state.projectData=await requestJson(`/api/projects/${PROJECT_ID}/audit-branding`,{method:'PUT',body:JSON.stringify({dataUrl:await readFileAsDataUrl(file)})});applyBrandingLogo();qs('#brandStatus').textContent='Audit logo saved.';}catch(error){qs('#brandStatus').textContent=error.message;}};
   renderCompanySettings();
 }
 const companyReportFields=[['auditReportTitle','Report title'],['auditClientName','Audited company'],['auditLocation','Location'],['auditPreparedBy','Prepared by'],['auditPeriodStart','Period start'],['auditPeriodEnd','Period end'],['auditIssueDate','Issue date'],['auditConfidentiality','Confidentiality']];
