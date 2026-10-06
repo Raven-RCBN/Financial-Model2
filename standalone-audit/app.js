@@ -366,9 +366,10 @@ function renderAuditDirectory() {
     if (!name || !email) return;
     const feedback = qs("#auditDirectoryStatus");
     if (users.some(user => user.name === name && user.id !== values.id)) { feedback.textContent = "This audit username is already assigned."; return; }
-    const companies=Array.from(form.querySelectorAll('[name="companies"]:checked')).map(input=>input.value);
-    if(values.companyScope==='selected'&&!companies.length){feedback.textContent='Select at least one company or choose All companies.';return;}
-    const user = {companyScope:values.companyScope,companies:values.companyScope==='selected'?companies:[],id: values.id || crypto.randomUUID(), name, email, ...(values.password ? {password: values.password} : {}), status: values.status, auditPermissions: {create: values.create === "on", recommend: values.recommend === "on", respond: values.respond === "on"}};
+    const companyScope=values.companyScope==='all'?'all':'selected';
+    const companies=values.companyScope.startsWith('company:')?[values.companyScope.slice(8)]:Array.from(form.querySelectorAll('[name="companies"]:checked')).map(input=>input.value);
+    if(companyScope==='selected'&&!companies.length){feedback.textContent='Select at least one company or choose All companies.';return;}
+    const user = {companyScope,companies:companyScope==='selected'?companies:[],id: values.id || crypto.randomUUID(), name, email, ...(values.password ? {password: values.password} : {}), status: values.status, auditPermissions: {create: values.create === "on", recommend: values.recommend === "on", respond: values.respond === "on"}};
     const previous = structuredClone(users);
     state.auditUsers = [...users.filter(item => item.id !== user.id), user];
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
@@ -376,14 +377,18 @@ function renderAuditDirectory() {
     catch (error) { state.auditUsers = previous; feedback.textContent = error.message; }
     finally { submit.disabled = false; }
   };
-  form.elements.companyScope.onchange=()=>qs('#auditUserCompanies').hidden=form.elements.companyScope.value!=='selected';
+  form.elements.companyScope.onchange=()=>{
+    const value=form.elements.companyScope.value;
+    if(value.startsWith('company:'))form.querySelectorAll('[name="companies"]').forEach(input=>input.checked=input.value===value.slice(8));
+    qs('#auditUserCompanies').hidden=value!=='selected';
+  };
   form.elements.companyScope.onchange();
   qs("#cancelAuditUserEdit").onclick = () => { form.reset(); form.elements.id.value = "";form.elements.companyScope.onchange(); };
   qsa("[data-edit-audit-user]").forEach(button => button.onclick = () => {
     const user = users.find(item => item.id === button.dataset.editAuditUser);
     for (const key of ["id", "name", "email", "status"]) form.elements[key].value = user[key] || "";
     for (const key of ["create", "recommend", "respond"]) form.elements[key].checked = Boolean(user.auditPermissions?.[key]);
-    form.elements.companyScope.value=user.companyScope==='selected'?'selected':'all';
+    form.elements.companyScope.value=user.companyScope==='selected'?(user.companies?.length===1?'company:'+user.companies[0]:'selected'):'all';
     form.querySelectorAll('[name="companies"]').forEach(input=>input.checked=(user.companies||[]).includes(input.value));
     qs('#auditUserCompanies').hidden=form.elements.companyScope.value!=='selected';
     form.elements.password.value = "";
@@ -1548,7 +1553,7 @@ function renderStandaloneAdmin(){
                           <label class="field"><span>Password (new or reset)</span><input name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" /></label>
                           <label class="field"><span>Status</span><select name="status"><option>Active</option><option>Inactive</option></select></label>
                         </div>
-                        <div class="audit-user-company-scope"><label class="field"><span>Company access</span><select name="companyScope"><option value="all">All companies</option><option value="selected">Selected companies</option></select></label><fieldset id="auditUserCompanies" hidden><legend>Companies this user can access</legend>${auditCompanyNames().map(name=>`<label class="audit-permission-option"><input type="checkbox" name="companies" value="${escapeHtml(name)}" /> ${escapeHtml(name)}</label>`).join('')}</fieldset></div>
+                        <div class="audit-user-company-scope"><label class="field"><span>Company access</span><select name="companyScope"><option value="all">All companies</option>${auditCompanyNames().map(name=>`<option value="company:${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')}<option value="selected">Multiple companies…</option></select></label><fieldset id="auditUserCompanies" hidden><legend>Select the companies this user can access</legend>${auditCompanyNames().map(name=>`<label class="audit-permission-option"><input type="checkbox" name="companies" value="${escapeHtml(name)}" /> ${escapeHtml(name)}</label>`).join('')}</fieldset></div>
                         <fieldset><legend>Audit roles — select one or more</legend>
                           <label class="audit-permission-option"><input type="checkbox" name="create" /> Audit creator — create observations and findings</label>
                           <label class="audit-permission-option"><input type="checkbox" name="recommend" /> Corrective action author — add actions, owners and due dates</label>
