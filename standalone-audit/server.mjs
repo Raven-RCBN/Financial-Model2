@@ -94,6 +94,10 @@ async function handle(req,res){
  const requireCompany=name=>{const company=selectedCompany(context,name || allowedCompanies[0]);if(!auditUserInCompany(auditActor,company))fail('You do not have access to this company.',403);return company;};
  const assignmentOptions=entry=>({...workflowOptions,company:entry?.entity || context.company.name});
  const visibleAssignees=users=>auditAssignees(users,[admin.name]).filter(user=>auditActor.admin || allowedCompanies.some(company=>auditUserInCompany(user,company)));
+ const visibleContext=value=>{
+  const settings=value.project.settings||{},companies=auditCompanies(value).filter(name=>auditUserInCompany(auditActor,name)),profiles=companyProfiles(value),profile=profiles[companies[0]];
+  return {company:{name:companies[0]||''},project:{id:projectId,name:profile?.projectName||'',settings:{auditSetup:profile?.auditSetup,auditReport:profile?.auditReport,brandingLogoUrl:settings.brandingLogoUrl,auditCompanies:companies,auditCompanyProfiles:Object.fromEntries(Object.entries(profiles).filter(([name])=>companies.includes(name))),auditSourceReports:Object.fromEntries(Object.entries(settings.auditSourceReports||{}).filter(([,r])=>companies.includes(r.companyName))),auditReportsByYear:profile?.auditReportsByYear}}};
+ };
  const verifyImageReferences=async entry=>{
   if(auditActor.admin || auditActor.companyScope!=='selected')return;
   const refs=e=>[e.photoUrl,...(e.observationImages||[]).map(i=>i.url),...(e.actions||[]).flatMap(a=>(a.responses||[]).flatMap(r=>(r.images||[]).map(i=>i.url)))].filter(Boolean);
@@ -130,9 +134,14 @@ async function handle(req,res){
   context.project.settings||={};context.project.settings.brandingLogoUrl='/public/'+name+'?v='+Date.now();await atomicJson(dbPath,context);return send(req,res,200,context);
  }
  if(child==='audit-settings'){
-  if(!auditActor.admin)return forbidden(req,res);
+  if(!auditActor.companySetup)return forbidden(req,res,'Company setup permission required.');
   if(req.method!=='PUT')return notFound(req,res);
-  const patch=await bodyJson(req);if(patch.companyProfile){const updated=saveCompanyProfile(context,patch);await atomicJson(dbPath,updated);return send(req,res,200,updated);}
+  const patch=await bodyJson(req);if(patch.companyProfile){
+   if(patch.newCompany){if(!auditActor.admin&&auditActor.companyScope==='selected')return forbidden(req,res,'All-company access is required to add a company.');}
+   else requireCompany(patch.companyProfile.name);
+   const updated=saveCompanyProfile(context,patch);await atomicJson(dbPath,updated);return send(req,res,200,auditActor.admin?updated:visibleContext(updated));
+  }
+  if(!auditActor.admin)return forbidden(req,res,'Use the company setup form.');
   if(context.project.settings?.auditCompanyProfiles)fail('Use the company-specific settings form. Refresh the webapp.');
   if(!String(patch.companyName||'').trim()||!String(patch.projectName||'').trim())fail('Company and project names are required.');
   if(!patch.auditSetup||['years','departments','areas'].some(key=>!Array.isArray(patch.auditSetup[key])||!patch.auditSetup[key].length||patch.auditSetup[key].some(v=>typeof v!=='string'||!v.trim())))fail('Provide report years, departments and audit areas.');
@@ -174,9 +183,7 @@ async function handle(req,res){
   const auditUsers = auditDirectories[projectId] || [];
 
   if (child === "audit-context" && req.method === "GET") {
-    const settings = payload.project.settings || {};
-    const visibleProfile=companyProfiles(context)[allowedCompanies[0]];
-    return send(req, res, 200, {company: {name: allowedCompanies[0] || payload.company.name}, project: {id: projectId, name: visibleProfile?.projectName || payload.project.name, settings: {auditSetup: visibleProfile?.auditSetup, auditReport: visibleProfile?.auditReport, brandingLogoUrl: settings.brandingLogoUrl,auditCompanies:allowedCompanies,auditCompanyProfiles:Object.fromEntries(Object.entries(companyProfiles(context)).filter(([name])=>allowedCompanies.includes(name))),auditSourceReports:Object.fromEntries(Object.entries(settings.auditSourceReports||{}).filter(([,r])=>allowedCompanies.includes(r.companyName))),auditReportsByYear:visibleProfile?.auditReportsByYear}}}, "application/json; charset=utf-8", {cacheControl: "no-store"});
+    return send(req,res,200,visibleContext(context),"application/json; charset=utf-8",{cacheControl:"no-store"});
   }
   if (child === "audit-access") {
     if (!auditActor.userId) return forbidden(req, res);
@@ -199,7 +206,7 @@ async function handle(req,res){
       try { if (user.password) credential = hashAuditPassword(user.password); }
       catch (error) { return badRequest(req, res, error.message); }
       if (!credential) return badRequest(req, res, "Set a password of at least 12 characters for each new Audit account.");
-      users.push({companyScope,companies:[...new Set(companies)],id: String(user.id), name: user.name.trim(), email: String(user.email).trim().toLowerCase(), status: user.status === "Active" ? "Active" : "Inactive", credential, auditPermissions: {create: user.auditPermissions?.create === true, recommend: user.auditPermissions?.recommend === true, respond: user.auditPermissions?.respond === true}});
+      users.push({companyScope,companies:[...new Set(companies)],id: String(user.id), name: user.name.trim(), email: String(user.email).trim().toLowerCase(), status: user.status === "Active" ? "Active" : "Inactive", credential, auditPermissions: {...((user.auditPermissions?.companySetup ?? existing?.auditPermissions?.companySetup) === true ? {companySetup:true} : {}),create: user.auditPermissions?.create === true, recommend: user.auditPermissions?.recommend === true, respond: user.auditPermissions?.respond === true}});
     }
     auditDirectories[projectId] = users;
     await atomicJson(auditUsersPath,auditDirectories);

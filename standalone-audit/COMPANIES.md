@@ -11,3 +11,9 @@ Standalone APIs enforce company access for listings, finding/action/reply writes
 Shared Audit permission exports remain backward-compatible: FM2 callers that omit the optional company validation retain their existing behavior. Audit deployment includes the updated shared file only in the standalone release; no FM2 service changes are required.
 
 Validation: audit-company-config.test.mjs and audit-companies-browser.mjs (synthetic localhost fixture only), plus existing workflow, notifications, query-index and mobile/browser suites. Browser coverage includes creating two companies, editing multiple report years, replacing the default year, distinct dropdowns, selected-company directory saves, all-company assignees, mobile-width layout, assignment rejection and cross-company API/PDF/media denial.
+
+## Delegated company setup
+
+Administrators can grant Company setup independently of creator, author and respondent roles. Active users with this permission see a dedicated Company setup screen; the user directory, password resets and role management remain administrator-only and their API writes return403. Company setup updates are limited to the user’s company scope. Adding a company requires All companies access. Existing clients that omit the setup flag on a directory save preserve it; explicitly clearing the checkbox revokes it.
+
+The administrator directory is a keyboard-focusable scrolling region capped at55vh/520px, with sticky column headings. Editing controls stay outside the scroll region.

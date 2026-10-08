@@ -5,6 +5,7 @@ export function auditIdentity(session, users = []) {
   const active = user && user.status === "Active";
   return { companyScope: user?.companyScope === "selected" ? "selected" : "all", companies: Array.isArray(user?.companies) ? user.companies : [], userId: session?.userId || "", email: active ? String(user.email || "").toLowerCase() : "", admin,
     create: admin || Boolean(active && user.auditPermissions?.create),
+    companySetup: admin || Boolean(active && user.auditPermissions?.companySetup),
     recommend: admin || Boolean(active && user.auditPermissions?.recommend),
     respond: admin || Boolean(active && user.auditPermissions?.respond) };
 }

@@ -1966,6 +1966,21 @@ p {
 .directory-scroll {
   overflow: auto;
 }
+.user-directory-panel .directory-scroll {
+  max-height: min(55vh, 520px);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.user-directory-panel .directory-scroll th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f7f9fc;
+}
+.user-directory-panel .directory-scroll:focus-visible {
+  outline: 2px solid #267b4b;
+  outline-offset: -2px;
+}
 
 .user-directory {
   min-width: 980px;

@@ -3,6 +3,13 @@ import {companyProfiles,saveCompanyProfile,companyReportSettings,validateCompany
 import {auditIdentity,auditUserInCompany,validateAuditAssignees} from '../audit/audit-permissions.mjs';
 const base={company:{name:'OBAN'},project:{id:'p',name:'OBAN estate',settings:{auditCompanies:['OBAN','Octavus'],auditSetup:{years:['2025','2024'],departments:['Mill'],areas:['SOP']},auditReport:{auditClientName:'OBAN',auditLocation:'Nigeria'},auditReportsByYear:{2024:{auditReportTitle:'OBAN 2024'}}}}};
 const patch={newCompany:false,reportYear:'2025',companyProfile:{name:'Octavus',projectName:'Octavus estate',auditSetup:{years:['2025','2026'],departments:['Stores'],areas:['Inventory']},auditReport:{auditReportTitle:'Octavus 2025',auditLocation:'Malaysia'},editedReports:{2026:{auditReportTitle:'Octavus 2026',auditLocation:'Malaysia'}}}};
+test('company setup permission is independent of administrator and workflow roles',()=>{
+ const user={name:'setup',status:'Active',auditPermissions:{companySetup:true}};
+ const identity=auditIdentity({userId:'setup',role:'audit'},[user]);
+ assert.equal(identity.companySetup,true);assert.equal(identity.admin,false);assert.equal(identity.create,false);
+ assert.equal(auditIdentity({userId:'setup'},[{...user,status:'Inactive'}]).companySetup,false);
+ assert.equal(auditIdentity({userId:'other'},[user]).companySetup,false);
+});
 test('profiles preserve old setup without sharing report identity; saves isolate company and report years',()=>{
  const p=companyProfiles(base);assert.equal(p.OBAN.auditReport.auditLocation,'Nigeria');assert.equal(p.Octavus.auditReport.auditLocation,undefined);
  const c=saveCompanyProfile(base,patch);assert.deepEqual(c.project.settings.auditCompanyProfiles.OBAN,p.OBAN);
