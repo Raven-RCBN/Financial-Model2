@@ -356,7 +356,7 @@ function renderAuditDirectory() {
   if (!target) return;
   if (state.currentSession?.role !== "admin") { target.innerHTML = ""; return; }
   const users = state.auditUsers || [];
-  target.innerHTML = users.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${[["companySetup", "Company setup"], ["create", "Audit creator"], ["recommend", "Corrective action author"], ["respond", "Assigned respondent"]].filter(([key]) => user.auditPermissions?.[key]).map(([, label]) => escapeHtml(label)).join("<br>") || "No permissions"}</td><td>${user.companyScope==='selected'?escapeHtml((user.companies||[]).join(", ")):"All companies"}</td><td>${escapeHtml(user.status)}</td><td><button class="secondary-button" data-edit-audit-user="${escapeHtml(user.id)}">Edit</button> <button class="secondary-button" data-delete-audit-user="${escapeHtml(user.id)}">Remove</button></td></tr>`).join("") || '<tr><td colspan="6">No audit users assigned. Add an audit user below.</td></tr>';
+  target.innerHTML = users.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${[["companySetup", "Company setup"], ["create", "Audit creator"], ["recommend", "Recommendation author"], ["respond", "Assigned respondent"]].filter(([key]) => user.auditPermissions?.[key]).map(([, label]) => escapeHtml(label)).join("<br>") || "No permissions"}</td><td>${user.companyScope==='selected'?escapeHtml((user.companies||[]).join(", ")):"All companies"}</td><td>${escapeHtml(user.status)}</td><td><button class="secondary-button" data-edit-audit-user="${escapeHtml(user.id)}">Edit</button> <button class="secondary-button" data-delete-audit-user="${escapeHtml(user.id)}">Remove</button></td></tr>`).join("") || '<tr><td colspan="6">No audit users assigned. Add an audit user below.</td></tr>';
   const form = qs("#auditUserForm");
   form.onsubmit = async event => {
     event.preventDefault();
@@ -416,7 +416,7 @@ function downloadBlob(filename, blob) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 function auditQueryKey(){const q=new URLSearchParams({page:String(state.auditPage),pageSize:String(state.auditPageSize),auditYear:String(state.auditYear),company:auditEntityValue()});if(state.auditStatusFilter)q.set('status',state.auditStatusFilter);if(state.auditSearch.trim())q.set('q',state.auditSearch.trim());return q.toString();}
@@ -600,51 +600,60 @@ function renderAuditAssignee(action = {}, draft = false, company = auditEntityVa
 function renderAuditActionDraft(action, index) {
   const input = (label, key, type = "text", required = true) => `<label class="field"><span>${label}</span><input data-action-field="${key}" type="${type}" value="${escapeHtml(action[key] || "")}" ${required ? "required" : ""} /></label>`;
   return `<section class="audit-action-card" data-audit-action-draft="${escapeHtml(action.id)}">
-    <header><b>Corrective action ${index + 1}</b>${index ? '<button type="button" class="secondary-button" data-remove-audit-action>Remove action</button>' : ""}</header>
+    <header><b>Recommendation ${index + 1}</b>${index ? '<button type="button" class="secondary-button" data-remove-audit-action>Remove recommendation</button>' : ""}</header>
     <div class="audit-action-grid">
-      <label class="field audit-action-description"><span>Corrective action</span><textarea data-action-field="description" rows="3" required placeholder="State the action and evidence required for closure.">${escapeHtml(action.description || "")}</textarea></label>
+      <label class="field audit-action-description"><span>Recommendation</span><textarea data-action-field="description" rows="3" required placeholder="State the recommendation. The assigned user will record the corrective action taken.">${escapeHtml(action.description || "")}</textarea></label>
       ${renderAuditAssignee(action, true)}${input("Action due date", "dueDate", "date")}
       <label class="field"><span>Initial action status</span><input data-action-field="status" value="Open" readonly /></label>
     </div>
-    <p>After saving, the assignee can add progress updates and photos under Assignee updates in View &amp; Report.</p>
+    <fieldset class="audit-assignee-preview" disabled aria-label="Corrective action — assigned user only">
+      <legend>Corrective action — assigned user only</legend>
+      <label class="field"><span>Corrective action taken</span><textarea rows="3" placeholder="The assigned user will enter the corrective action after this audit item is finalized."></textarea></label>
+      <div class="audit-update-photo-actions"><button type="button" class="secondary-button">Upload photos</button><button type="button" class="secondary-button">Take photo</button></div>
+    </fieldset>
+    <p>Locked during data entry. After finalization, only the assigned user or an administrator can record corrective actions and photos in View &amp; Report. The finding and recommendation become read-only for other users.</p>
   </section>`;
 }
 
 function auditUpdateTime(value){return value?new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'long'}).format(new Date(value)):'';}
 
+function canEditAuditDraft(entry) {
+  return entry?.status === "Draft" && !entry.sourceReport && (state.currentSession?.role === "admin" || auditPermission("create") && entry.createdBy === state.currentSession?.userId);
+}
+
 function renderAuditActionTracking(entry) {
-  if(entry.status==='Draft')return `<section class="audit-action-tracking"><p>Draft — editable until finalized. No assignment emails are sent and this item is excluded from PDF reports.</p>${auditPermission('create') && (state.currentSession?.role==='admin' || entry.createdBy===state.currentSession?.userId)?`<button type="button" class="primary-button" data-edit-audit-draft="${escapeHtml(entry.id)}">Edit draft</button>`:''}</section>`;
-  return `<section class="audit-action-tracking"><h4>Corrective action monitoring</h4>${auditActionsFor(entry).map((action, index) => {
+  if(entry.status==='Draft')return `<section class="audit-action-tracking"><p>Draft — editable until finalized. Use Edit at the top of this finding to update or delete your draft. No assignment emails are sent and this item is excluded from PDF reports.</p></section>`;
+  return `<section class="audit-action-tracking"><h4>Recommendations and corrective actions</h4><p>The finding and recommendation are finalized. Only the assigned user can record their corrective action below; administrators can make corrections.</p>${auditActionsFor(entry).map((action, index) => {
     const timing = auditActionTiming(action);
     const followup = action.responseDueDate ? auditActionTiming({dueDate: action.responseDueDate, status: action.status}) : null;
     return `<section class="audit-action-card audit-action-${timing.tone}">
-      <header><b>Action ${index + 1}</b><span class="audit-action-badge">${escapeHtml(timing.label)}</span></header>
+      <header><b>Recommendation ${index + 1}</b><span class="audit-action-badge">${escapeHtml(timing.label)}</span></header>
       <p class="multiline-text">${escapeHtml(action.description)}</p>
       <div class="audit-response-row"><span><b>Responsible person</b>${escapeHtml(action.owner || "Unassigned")}</span><span><b>Email</b>${escapeHtml(action.email || "Not assigned")}</span><span><b>Action due date</b>${auditDateLabel(action.dueDate)} · ${escapeHtml(entry.timeZone || "Africa/Lagos")}</span><span><b>Status</b>${escapeHtml(action.status || "Open")}</span></div>
-      ${auditPermission("recommend") && (!auditActionLocked(action) || state.currentSession?.role === "admin") ? `<details><summary>Edit corrective action / assignment</summary><form class="audit-update-action-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}"><div class="audit-action-grid">
-        <label class="field audit-action-description"><span>Corrective action</span><textarea name="description" required>${escapeHtml(action.description)}</textarea></label>
+      ${state.currentSession?.role === "admin" ? `<details><summary>Edit recommendation / assignment</summary><form class="audit-update-action-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}"><div class="audit-action-grid">
+        <label class="field audit-action-description"><span>Recommendation</span><textarea name="description" required>${escapeHtml(action.description)}</textarea></label>
         ${renderAuditAssignee(action,false,entry.entity || auditEntityValue())}
         <label class="field"><span>Action due date</span><input name="dueDate" type="date" value="${escapeHtml(action.dueDate || "")}" required /></label>
-      </div><div class="audit-action-form-footer"><span role="status"></span><button type="submit" class="secondary-button">Save action changes</button></div></form></details>` : ""}
-      <h4>Assignee updates</h4>
+      </div><div class="audit-action-form-footer"><span role="status"></span><button type="submit" class="secondary-button">Save recommendation changes</button></div></form></details>` : ""}
+      <h4>Corrective actions by assignee</h4>
       ${action.responseDueDate ? `<p class="audit-action-badge audit-action-${followup.tone}">Follow-up due: ${auditDateLabel(action.responseDueDate)} · ${escapeHtml(followup.label)}</p>` : ""}
-      ${(action.responses || []).map(reply => `<div class="audit-action-reply"><b>${escapeHtml(reply.author || "Recorded response")}</b><small>${escapeHtml(reply.email || "")} · ${escapeHtml(auditUpdateTime(reply.createdAt))} · Follow-up due: ${auditDateLabel(reply.dueDate)}</small><p class="multiline-text">${escapeHtml(reply.text)}</p>${reply.status?`<p>Status: ${escapeHtml(reply.status)}</p>`:""}${renderAuditObservationImages(reply.images||[])}</div>`).join("") || "<p>No updates recorded yet.</p>"}
+      ${(action.responses || []).map(reply => `<div class="audit-action-reply"><b>${escapeHtml(reply.author || "Recorded response")}</b><small>${escapeHtml(reply.email || "")} · ${escapeHtml(auditUpdateTime(reply.createdAt))} · Follow-up due: ${auditDateLabel(reply.dueDate)}</small><p class="multiline-text">${escapeHtml(reply.text)}</p>${reply.status?`<p>Status: ${escapeHtml(reply.status)}</p>`:""}${renderAuditObservationImages(reply.images||[])}</div>`).join("") || "<p>No corrective actions recorded yet.</p>"}
       ${canReplyToAuditAction(action) ? `<form class="audit-action-reply-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}">
         <p class="audit-update-note">Updating as ${escapeHtml(state.currentSession.userId)}. Date and time are recorded automatically when you save.</p>
         <div class="audit-action-grid">
           <label class="field"><span>Response / follow-up due date</span><input name="dueDate" type="date" value="${escapeHtml(action.responseDueDate || "")}" /></label>
           <label class="field"><span>Action status</span><select name="status">${["Open", "In progress", "Closed"].map(status => `<option ${status === action.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
-          <label class="field audit-action-description"><span>Progress update</span><textarea name="text" rows="2" required></textarea></label>
+          <label class="field audit-action-description"><span>Corrective action taken</span><textarea name="text" rows="2" required placeholder="Describe the corrective action you have taken and attach supporting photos."></textarea></label>
           <div class="field audit-action-description audit-update-photos"><span>Photo evidence (up to 8 photos)</span><div class="audit-update-photo-actions"><button type="button" class="secondary-button" data-reply-upload>Upload photos</button><button type="button" class="secondary-button" data-reply-camera>Take photo</button></div><input type="file" accept="image/jpeg,image/png,image/webp" multiple data-reply-files aria-label="Upload action photos" hidden /><input type="file" accept="image/*" capture="environment" data-reply-camera-file hidden /><small data-reply-photo-count>No photos selected</small><div data-reply-previews class="audit-observation-images"></div></div>
         </div><div class="audit-action-form-footer"><span role="status" class="audit-reply-status"></span><button class="primary-button" type="submit">Save update</button></div>
       </form>` : auditActionLocked(action) ? "<p>Updates are locked after the due date. Ask an administrator to extend the deadline.</p>" : "<p>Replies are limited to the assigned respondent and administrators.</p>"}
     </section>`;
   }).join("")}
-  ${auditPermission("recommend") ? `<form class="audit-add-action-form" data-entry-id="${escapeHtml(entry.id)}"><h4>Add corrective action</h4><div class="audit-action-grid">
-  <label class="field audit-action-description"><span>Recommendation / corrective action</span><textarea name="description" required></textarea></label>
+  ${state.currentSession?.role === "admin" ? `<form class="audit-add-action-form" data-entry-id="${escapeHtml(entry.id)}"><h4>Add recommendation</h4><div class="audit-action-grid">
+  <label class="field audit-action-description"><span>Recommendation</span><textarea name="description" required></textarea></label>
   ${renderAuditAssignee({},false,entry.entity || auditEntityValue())}
   <label class="field"><span>Action due date</span><input name="dueDate" type="date" required /></label>
-  </div><div class="audit-action-form-footer"><span role="status"></span><button class="primary-button" type="submit">Save corrective action</button></div></form>` : ""}</section>`;
+  </div><div class="audit-action-form-footer"><span role="status"></span><button class="primary-button" type="submit">Save recommendation</button></div></form>` : ""}</section>`;
 }
 
 function captureAuditDraftFields() {
@@ -752,7 +761,7 @@ function renderAuditEntry(entries) {
               <div class="audit-observation-dropzone ${observationImages.length ? "has-image" : ""}" id="auditObservationDropzone" tabindex="0" role="button" aria-label="Add images inside observation or finding">
                 <div>
                   <b>${observationImages.length ? "Add more observation images" : "Drop images here"}</b>
-                  <span>Drag images from desktop into this observation, or click to choose.</span>
+                  <span>Drag images here or click to choose. All attached observation images are included in the report.</span>
                 </div>
               </div>
               <input class="audit-file-input" id="auditObservationImageInput" type="file" accept="image/*" multiple />
@@ -764,11 +773,11 @@ function renderAuditEntry(entries) {
             <textarea id="auditImpact" rows="3" placeholder="Describe operational, financial, safety, compliance, or quality impact.">${escapeHtml(draft.impact || "")}</textarea>
           </label>
           ${auditPermission("recommend") ? `<section class="audit-actions-editor">
-            <h4>Recommendation / Corrective actions</h4>
+            <h4>Recommendations</h4>
             <p>Assign a responsible person, email and due date to each action. Record responses below each action.</p>
             ${(draft.actions?.length ? draft.actions : [{id: crypto.randomUUID(), description: draft.recommendation || "", status: "Open"}]).map(renderAuditActionDraft).join("")}
-            <button type="button" class="secondary-button" id="addAuditAction">Add corrective action</button>
-          </section>` : '<p class="field wide">The corrective action author will add recommendations after this finding is saved.</p>'}
+            <button type="button" class="secondary-button" id="addAuditAction">Add recommendation</button>
+          </section>` : '<p class="field wide">The recommendation author will add recommendations after this finding is saved.</p>'}
         </div>
         <div class="audit-evidence-grid">
           <section class="audit-evidence-card">
@@ -811,6 +820,7 @@ function renderAuditEntry(entries) {
         <footer class="audit-form-footer">
           <span id="auditSaveStatus">Findings are saved to the Audit backend for reporting.</span>
           <div class="action-row">
+            ${canEditAuditDraft(state.auditEditingDraft)?'<button type="button" class="secondary-button" id="deleteAuditDraft">Delete draft</button>':""}
             <button class="secondary-button" id="clearAuditDraft">Clear</button>
             <button class="primary-button" id="saveAuditEntry"><span class="mini-icon">sv</span> ${draft.status === "Open" ? "Finalize audit item" : "Save draft"}</button>
           </div>
@@ -868,14 +878,12 @@ function renderAuditReport(entries) {
             <h3>${escapeHtml(auditEntityValue())} — Audit report ${escapeHtml(state.auditYear)}</h3>
           </div>
           <div class="input-actions">
-            <button class="action-icon edit" id="printAuditReport" title="Print or save report" aria-label="Print or save report">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v7H6z" /></svg>
-            </button>
-            <button class="action-icon add" id="downloadAuditReport" title="Download report draft" aria-label="Download report draft">
+            <button class="action-icon add" id="downloadAuditReport" title="Download report PDF" aria-label="Download report PDF">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
             </button>
           </div>
         </header>
+        <p id="auditDownloadStatus" role="status" aria-live="polite" style="margin: 0 1rem;"></p>
         <div class="audit-report-tools">
           <label>
             <span>Report year</span>
@@ -950,7 +958,7 @@ function renderAuditReport(entries) {
                       <span>Audit Issue ${entry.sourceReport?.issue || ((state.auditPage-1)*state.auditPageSize+index+1)}: ${escapeHtml(entry.department)}</span>
                       <h5>${escapeHtml(entry.sourceReport ? "Audit observation" : (entry.area || "Audit observation"))}</h5>
                     </div>
-                    <b class="risk ${auditPriorityClass(entry.priority)}">${escapeHtml(entry.priority)}</b>
+                    <div class="input-actions">${canEditAuditDraft(entry)?`<button type="button" class="secondary-button" data-edit-audit-draft="${escapeHtml(entry.id)}">Edit</button>`:""}${state.currentSession?.role === "admin" && entry.status !== "Draft" && !entry.sourceReport ? `<button type="button" class="secondary-button" data-reopen-audit="${escapeHtml(entry.id)}">Reopen as draft</button>` : ""}<b class="risk ${auditPriorityClass(entry.priority)}">${escapeHtml(entry.priority)}</b></div>
                   </header>
                   <div class="audit-finding-body">
                     <div><b>Observations / Findings</b><span class="multiline-text">${escapeHtml(entry.finding || (entry.status === "Draft" ? "Untitled draft" : ""))}</span></div>
@@ -1070,6 +1078,7 @@ function refreshAuditObservationImageSection() {
   if (input) input.value = "";
 }
 
+let auditObservationImageJobs = 0;
 async function addAuditObservationImages(files) {
   captureAuditDraftFields();
   const status = qs("#auditSaveStatus");
@@ -1078,7 +1087,9 @@ async function addAuditObservationImages(files) {
     if (status) status.textContent = "Please drop or choose image files for the observation.";
     return;
   }
-  if (status) status.textContent = "Preparing observation image...";
+  auditObservationImageJobs++;
+  if (status) status.textContent = "Preparing observation images. Please wait before saving…";
+  try {
   const additions = await Promise.all(imageFiles.map(async (file) => ({
     id: `obs_${Date.now()}_${Math.random().toString(16).slice(2)}`,
     dataUrl: await readImageFileAsCappedDataUrl(file, 960, 0.78),
@@ -1087,7 +1098,10 @@ async function addAuditObservationImages(files) {
   })));
   state.auditObservationImages = [...(state.auditObservationImages || []), ...additions];
   refreshAuditObservationImageSection();
-  if (status) status.textContent = `${additions.length} observation image${additions.length === 1 ? "" : "s"} added.`;
+  if (status) status.textContent = `${state.auditObservationImages.length} observation images ready to save.`;
+  } catch(error) {
+    if(status)status.textContent = 'Images could not be prepared. Please retry: '+error.message;
+  } finally { auditObservationImageJobs--; }
 }
 
 function updateAuditObservationImageDescription(index, description) {
@@ -1198,38 +1212,41 @@ function captureAuditCameraPhoto() {
   setTimeout(() => captureAuditGeoInBackground(), 0);
 }
 
-async function downloadAuditPdf(printReport = false) {
-  const printWindow=printReport?window.open("about:blank","_blank"):null;
+let auditDownloadPending = false;
+async function downloadAuditPdf() {
+  if (auditDownloadPending) return;
+  auditDownloadPending = true;
+  const company = auditEntityValue(), year = state.auditYear;
+  const showStatus = message => { const status = qs("#auditDownloadStatus"); if (status) status.textContent = message; };
   const button = qs("#downloadAuditReport");
-  const previousLabel = button?.getAttribute("aria-label") || "Download audit report PDF";
-  if (button) {
-    button.setAttribute("aria-label", "Generating audit report PDF");
-    button.setAttribute("disabled", "disabled");
-  }
+  button?.setAttribute("disabled", "disabled");
+  button?.setAttribute("aria-busy", "true");
+  showStatus(`Preparing ${company} report for ${year}…`);
   try {
     const response = await fetch(`/api/projects/${PROJECT_ID}/audit-pdf?download=1`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        auditYear: state.auditYear,
-        auditEntity: auditEntityValue(),
-        reportSettings: auditReportSettings(),
-        brandingLogoUrl: brandLogoUrl(),
-      }),
+      body: JSON.stringify({ auditYear: year, auditEntity: company }),
+      signal: AbortSignal.timeout(150000),
     });
-    if (!response.ok) throw new Error(`PDF generation failed: ${response.status}`);
-    const blob = await response.blob();
-    const issueDate = auditReportSettings().auditIssueDate || new Date().toISOString().slice(0, 10);
-    const fallbackName = `oban-audit-report-${issueDate}.pdf`;
-    if(printWindow){const pdfUrl=URL.createObjectURL(blob);printWindow.location.href=pdfUrl;setTimeout(()=>URL.revokeObjectURL(pdfUrl),120000);}else downloadBlob(filenameFromDisposition(response.headers.get("Content-Disposition"), fallbackName), blob);
-  } catch (error) {
-    printWindow?.close();window.alert(error.message || "Audit PDF could not be generated.");
-  } finally {
-    if (button) {
-      button.setAttribute("aria-label", previousLabel);
-      button.removeAttribute("disabled");
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(response.status === 401 ? "Please sign in again, then download the report." : error.message || `PDF generation failed (${response.status}). Please retry.`);
     }
+    const blob = await response.blob();
+    if (!response.headers.get("Content-Type")?.includes("application/pdf") || await blob.slice(0,5).text() !== "%PDF-") {
+      throw new Error("The server did not return a PDF. Please sign in again and retry.");
+    }
+    downloadBlob(filenameFromDisposition(response.headers.get("Content-Disposition"), `audit-report-${year}.pdf`), blob);
+    showStatus(`Downloaded ${company} report for ${year}. Check your browser’s downloads.`);
+  } catch (error) {
+    showStatus(error.name === "TimeoutError" ? "The report took too long to prepare. Please retry." : error.message || "Audit PDF could not be generated.");
+  } finally {
+    auditDownloadPending = false;
+    const currentButton = qs("#downloadAuditReport");
+    currentButton?.removeAttribute("disabled");
+    currentButton?.removeAttribute("aria-busy");
   }
 }
 
@@ -1279,14 +1296,37 @@ function bindAuditEvents() {
     document.querySelectorAll('[data-action-field="status"]').forEach(input=>input.value=isDraft?'Draft':'Open');
   };
   if(draftStatus){syncDraftRequirements();draftStatus.addEventListener('change',syncDraftRequirements);}
+  document.querySelectorAll('[data-reopen-audit]').forEach(button=>button.addEventListener('click',async()=>{
+    const entry=state.auditEntries.find(e=>e.id===button.dataset.reopenAudit);
+    if(!entry || !window.confirm('Reopen this item as a draft? The creator and assigned users will be notified. Corrective-action updates pause until finalization.'))return;
+    button.disabled=true;
+    try{
+      await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`,{method:'POST',body:JSON.stringify({id:entry.id,operation:'reopen-draft',baseUpdatedAt:entry.updatedAt})});
+      await renderAudit();
+    }catch(error){window.alert(error.message || 'Could not reopen this item.');button.disabled=false;}
+  }));
   document.querySelectorAll('[data-edit-audit-draft]').forEach(button=>button.addEventListener('click',()=>{
     const entry=state.auditEntries.find(e=>e.id===button.dataset.editAuditDraft);
-    if(!entry)return;
+    if(!canEditAuditDraft(entry))return;
     resetAuditDraft();state.auditEditingDraft=structuredClone(entry);state.auditDraftFields=structuredClone(entry);
     state.auditObservationImages=structuredClone(entry.observationImages || []);state.auditDraftGeo=entry.geo;
     state.auditDraftImage=entry.photoDataUrl || entry.photoUrl || null;state.auditDraftImageName=entry.photoName || '';
     state.auditYear=entry.auditYear;state.auditEntity=entry.entity;state.selectedAuditPanel='entry';renderAudit();
   }));
+  bindClick("#deleteAuditDraft", async () => {
+    const entry=state.auditEditingDraft;
+    if(!canEditAuditDraft(entry))return;
+    if(!window.confirm('Delete this saved draft? It will be removed from the audit list.'))return;
+    const button=qs('#deleteAuditDraft'),saveButton=qs('#saveAuditEntry'),status=qs('#auditSaveStatus');
+    button.disabled=true;if(saveButton)saveButton.disabled=true;
+    try {
+      await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`,{method:'DELETE',body:JSON.stringify({id:entry.id,baseUpdatedAt:entry.updatedAt})});
+      resetAuditDraft();state.auditPage=1;state.selectedAuditPanel='report';await renderAudit();
+    } catch(error) {
+      if(status)status.textContent=error.message || 'Draft could not be deleted.';
+      button.disabled=false;if(saveButton)saveButton.disabled=false;
+    }
+  });
   document.querySelectorAll(".audit-add-action-form, .audit-update-action-form").forEach(form => form.addEventListener("submit", async event => {
     event.preventDefault();
     const button = form.querySelector("button");
@@ -1401,6 +1441,7 @@ function bindAuditEvents() {
   });
 
   bindClick("#saveAuditEntry", async () => {
+    if(auditObservationImageJobs){const status=qs('#auditSaveStatus');if(status)status.textContent='Please wait for all observation images to finish preparing before saving.';return;}
     const finding = qs("#auditFinding")?.value.trim();
     const isDraft = qs("#auditStatus")?.value === "Draft";
     const status = qs("#auditSaveStatus");
@@ -1412,7 +1453,7 @@ function bindAuditEvents() {
     if (!isDraft && actionInputs.some(input => !input.reportValidity())) return;
     const actions = readAuditActionDrafts();
     if (!isDraft && actions.some(action => !action.description || !action.owner || !action.email || !action.dueDate)) {
-      if (status) status.textContent = "Complete the corrective action, responsible person, email and due date for each action.";
+      if (status) status.textContent = "Complete the recommendation, responsible person, email and due date for each recommendation.";
       return;
     }
     const entry = {
@@ -1482,8 +1523,7 @@ function bindAuditEvents() {
     renderAudit();
   });
 
-  bindClick("#printAuditReport", () => downloadAuditPdf(true));
-  bindClick("#downloadAuditReport", () => downloadAuditPdf(false));
+  bindClick("#downloadAuditReport", () => downloadAuditPdf());
 }
 
 async function renderAudit() {
@@ -1559,7 +1599,7 @@ function renderStandaloneAdmin(){
                         <fieldset><legend>Audit roles — select one or more</legend>
                           <label class="audit-permission-option"><input type="checkbox" name="companySetup" /> Company setup — manage company details, audit options and reports</label>
                           <label class="audit-permission-option"><input type="checkbox" name="create" /> Audit creator — create observations and findings</label>
-                          <label class="audit-permission-option"><input type="checkbox" name="recommend" /> Corrective action author — add actions, owners and due dates</label>
+                          <label class="audit-permission-option"><input type="checkbox" name="recommend" /> Recommendation author — add recommendations, owners and due dates</label>
                           <label class="audit-permission-option"><input type="checkbox" name="respond" /> Assigned respondent — reply and update status on actions assigned to their email</label>
                         </fieldset>
                         <div class="audit-action-form-footer"><span></span><button class="primary-button" type="submit">Save audit user</button> <button class="secondary-button" type="button" id="cancelAuditUserEdit">Clear</button></div>

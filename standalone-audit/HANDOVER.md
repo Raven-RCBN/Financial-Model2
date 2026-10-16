@@ -102,3 +102,137 @@ Gradle: `/Users/admin/.gradle/wrapper/dists/gradle-8.13-bin/5xuhj0ry160q40clulaz
 
 Original workspace: `/Users/admin/Library/Mobile Documents/com~apple~CloudDocs/T7 CODEX/Archived Projects/Financial Model 2`.
 Prior account handover remains private at that workspace's `AgIntel-Audit-Testing/Audit-account-handover.txt`; passwords are not copied into this handover or Git. Existing domain-preparation archives are in `Audit-Domain-Migration/`. No live account export should be inferred from these code-only artifacts.
+
+## 12 October 2026 — offline Android programmer handover
+
+User requested the mobile APK source for a programmer and confirmed that login,
+roles and company scope must match the webapp. Prepared source ZIP and test APK
+in the local Audit `artifacts` folder (`Audit-Mobile-Programmer-Source-20261012.zip`
+and `Audit-Mobile-0.3.0-test.apk`). `mobile/PROGRAMMER-HANDOVER.md` is the build,
+auth/API, offline-photo sync and limitation reference. The reproducible package
+script uses an explicit code allowlist, strips historical seed records from the
+packaged store and excludes runtime data, credentials, original reports and keys.
+
+Changed Android's default host to `audit.digitalpalm.ai`, default version to
+0.3.0-test/code 3, generated the Gradle 8.13 wrapper and made the native user-agent
+use BuildConfig version. APK assets are bundled, so web deployments do not update
+installed mobile UI. Existing Audit debug certificate is retained, no key included.
+No production data or deployed server files were changed for this task.
+
+Android assembleDebug/lintDebug passed (one expected JavaScript-enabled WebView
+warning; zero errors). Nineteen focused unit tests passed. The synthetic localhost
+browser test passed offline reload/draft/photo persistence, ordered dependent
+sync, authenticated evidence, retry deduplication, shared web/mobile session,
+server respondent write denial and selected-company isolation. Hardware camera,
+GPS and lifecycle remain to be validated on a physical Android device.
+
+The current mobile device autosave is distinct from server Draft status; server
+Draft editing/finalization stays in the webapp. Sync is foreground-only and fetches
+all permitted records/photos; selected offline packs, bounded storage, delta sync
+and native background upload remain potential programmer improvements.
+
+## 13 October 2026 — report download control
+
+Removed the print icon, leaving one Download report PDF button. Blob URLs remain
+valid for 60 seconds rather than being revoked immediately. Added visible progress,
+server error messages, PDF content/signature validation, timeout and duplicate-click
+guard. Synthetic browser test `tests/audit-download-browser.mjs` verified an actual
+PDF download containing all six findings beyond the five-row page, error recovery,
+and invalid HTML-response rejection. Parsed the three-page PDF and viewed page 1.
+
+Deployed only standalone-audit/app.js (SHA256
+78ac83f0b6d4c731f3002d8b6bc02d24e4bc40fa00d876a944eab0c47efa4e54).
+Server backup: /home/deploy_audit/backups/before-download-fix-20261013/app.js.
+No service restart or data changes. Live authenticated frontend checks confirm the
+print icon is absent and delayed URL cleanup is served.
+
+User approved server-only verification after automatic review rejected a broad
+live report diagnostic. No report bytes or credentials were copied to the Mac.
+Both OBAN year exports returned HTTP 200: 2024 has 24 findings including all 22
+imported sections, produces 59 pages (55 original plus additional-record appendix),
+6,822,626 bytes. 2025 has all 22 imported sections and produces 107 pages,
+27,165,044 bytes, SHA256 identical to the uploaded original. No corrective actions
+were present in either year at verification. Existing export behavior preserves
+original pages and appends additional records; it does not re-typeset the imported
+narrative. User's current report download fix leaves that export behavior intact.
+
+## 13 October 2026 — recommendation and assignee corrective-action workflow
+
+Auditor-authored description is now labelled Recommendation in data entry,
+tracking, user-role labels, notification text and generated PDF follow-up sections.
+Assignee response is labelled Corrective action taken. Data entry shows a disabled
+corrective-action textbox and photo controls under each recommendation, explaining
+that they open only after finalization. Existing schema/records are unchanged.
+
+Standalone workflowOptions now enables lockFinalized. Non-admin users cannot
+change finalized findings, recommendations or assignments, or add recommendations;
+only assigned respondents with respond permission can submit corrective-action
+replies/photos/status. Draft creator editing and draft validation remain unchanged.
+Administrator corrections/deadline extensions and the existing overdue lock remain.
+The shared validator gates this behavior on the standalone option, leaving FM2's
+options unchanged. Mobile sync enforces it too, including observation updates;
+idempotent acknowledgements remain accepted. Older mobile builds that attempt to
+add recommendations after saving an Open finding receive the new explicit 403 and
+retain the queued change for review. Future mobile UI work must assemble the
+recommendations before finalization or support server Draft finalization; the
+previous programmer source ZIP/test APK was not rebuilt in this webapp task.
+
+Validation: 18 workflow/photo/mobile unit tests passed; synthetic browser verified
+visible disabled draft controls, editable recommendation, pre-finalization reply
+rejection, post-finalization edit rejection for creator/respondent, and assigned
+corrective action with photo/server author/time. No production test records created.
+
+Deployed six source files only from audit-recommendation-workflow-20261013.tar.gz
+(SHA256 4c4fd768377d5e3c930170f92ad1915cb89c54d93fa79f0db6f16f1cb9659050).
+Code backup: /home/deploy_audit/backups/before-recommendation-workflow-20261013/source.tar.gz.
+Only Audit service restarted. Runtime data and FM2 unchanged.
+
+## 17 October 2026 — draft editing/deletion, evidence retention and administrator reopening
+
+Detailed Findings now shows Edit at the top of drafts owned by the current creator
+(or any draft for an administrator). Edit opens the populated Data Entry form,
+including all observation photos. Delete draft requires confirmation and the exact
+saved revision; the API enforces creator/admin permissions, rejects finalized or
+imported records and stale writes, and prevents a stale editor recreating a deleted
+draft. Deletion retains a private recovery record in data/deleted-drafts and keeps
+photo files to avoid breaking shared references.
+
+Administrators can select Reopen as draft on finalized webapp-created findings.
+Imported OBAN PDF findings remain locked, per explicit user choice. Reopening
+preserves the original creator and corrective-action/photo history, pauses assignee
+updates, and records the administrator/time. The creator/admin can revise and
+finalize again. Recommendations with existing responses cannot be removed while
+editing. Server-owned lifecycle notification revisions notify the creator and
+assigned users on reopening and re-finalization through the existing persistent
+email ledger/retry worker. Original draft creation still sends no assignment mail.
+
+Removed the shared normalizer's silent 12-observation-photo truncation. Desktop
+save/edit/report/PDF preserves every attached observation photo. Saving waits for
+photo preparation. Mobile's existing capture limit remains 12 new photos per
+upload, but replying to desktop entries with more photos no longer rejects them.
+Earlier unlinked uploads were not reassociated: ownership is uncertain and the
+user expressly prohibited changes to existing records during testing.
+
+Validation: 29 workflow, mobile, draft and notification unit tests passed. A
+synthetic localhost browser test uploaded 16 photos, saved/reloaded/edited/deleted
+a draft, checked cancel/stale-save/unauthorized deletion, exercised admin reopen,
+creator re-finalization and assignee lock. Generated PDF contains all 16 captions
+and 16 image placements over three pages. Email tests use a simulated sender and
+verify retries/deduplication; no test messages sent to real users. The temporary
+fixture has a known synthetic-only administrator login for these tests.
+
+Deployed six source files only from audit-draft-reopen-photos-20261017.tar.gz,
+SHA256 5cd1d6871d0b3532ca54c8c7527701c4dc4f6fefe171e28df024dedd9267ab9b.
+Backup: /home/deploy_audit/backups/before-draft-reopen-photos-20261017/source.tar.gz.
+Compared live source before installation; canonical standalone store/import
+transforms retained. Restarted audit-web.service only. Health passed, all six
+installed source hashes matched, and findings/context/users remained byte-for-byte
+unchanged across deployment. SMTP configuration checked without revealing values.
+
+Git synchronization on 17 October: verified the eight changed desktop/backend
+source files against live checksums. Updated the remaining mobile/web/app.js
+version-label change with a source backup at
+/home/deploy_audit/backups/before-mobile-label-20261017/app.js. Public health passed;
+findings, settings and user directory checksums were unchanged. Included the
+previously packaged mobile programmer guide in the checkout, with current
+finalization restrictions documented. No APK rebuild was performed in this sync.

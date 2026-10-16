@@ -34,9 +34,30 @@ export function auditToday(now = new Date(), timeZone = 'Asia/Kuala_Lumpur') {
 export function actionLocked(action, options = {}) {
   return validDate(action.dueDate) && action.dueDate < auditToday(options.now || new Date(), options.timeZone);
 }
+export function authorizeDraftDeletion(identity, existing, baseUpdatedAt) {
+  if (!identity.userId) reject('Sign in to delete a draft.',401);
+  if (!existing) reject('Draft not found.',404);
+  if (!identity.admin && (!identity.create || existing.createdBy !== identity.userId)) reject('Only the draft creator or administrator can delete this draft.');
+  if (existing.status !== 'Draft' || existing.sourceReport) reject('Only drafts can be deleted. Finalized items are locked.',409);
+  if (!baseUpdatedAt || baseUpdatedAt !== existing.updatedAt) reject('This draft changed. Reopen it before deleting.',409);
+}
+export function assertFinalizedAuditWrite(identity, patch, existing, options = {}) {
+  if (options.lockFinalized && existing && existing.status !== 'Draft' && !identity.admin && patch.operation !== 'reply') {
+    reject('This audit item is finalized. Only the assigned respondent can record corrective actions; ask an administrator to change the finding or recommendation.');
+  }
+}
 export function applyAuditWrite(identity, patch, existing, options = {}) {
   if (!identity.userId) reject("Sign in to update audits.");
+  assertFinalizedAuditWrite(identity, patch, existing, options);
   const now = (options.now || new Date()).toISOString();
+  if (options.drafts && patch.operation === 'reopen-draft') {
+    if (!identity.admin) reject('Only administrators can reopen finalized audit items.');
+    if (!existing) reject('Finding not found.',404);
+    if (existing.sourceReport) reject('Imported report findings remain locked.',409);
+    if (existing.status === 'Draft') reject('This item is already a draft.',409);
+    if (!patch.baseUpdatedAt || patch.baseUpdatedAt !== existing.updatedAt) reject('This item changed. Refresh before reopening.',409);
+    return {...existing,status:'Draft',reopenedAt:now,reopenedBy:identity.userId,updatedAt:now};
+  }
   if (options.drafts && (patch.status === 'Draft' && !existing || existing?.status === 'Draft')) {
     if (existing?.sourceReport) reject('Issued reports cannot become drafts.');
     if (!identity.create || existing && !identity.admin && existing.createdBy !== identity.userId) reject('Only the draft creator or administrator can edit this draft.');
@@ -49,7 +70,13 @@ export function applyAuditWrite(identity, patch, existing, options = {}) {
     const actions = patch.actions || existing?.actions || [];
     if (!Array.isArray(actions) || actions.some(a=>!a || typeof a!=='object')) reject('Invalid corrective actions.',400);
     if (actions.some(a=>a.description || a.owner || a.email || a.dueDate) && !identity.recommend) reject('Corrective action permission is required.');
-    next.actions = actions.map(a=>({id:a.id || randomUUID(),description:String(a.description||''),owner:String(a.owner||''),email:String(a.email||''),dueDate:String(a.dueDate||''),status:'Open',responses:[]}));
+    if (existing?.reopenedAt && existing.actions?.some(a=>a.responses?.length && !actions.some(b=>b.id===a.id))) reject('Recommendations with corrective-action history cannot be removed.',400);
+    const ids=actions.map(a=>a.id).filter(Boolean);
+    if(new Set(ids).size!==ids.length)reject('Recommendation identifiers must be unique.',400);
+    next.actions = actions.map(a=>{
+      const prior=existing?.reopenedAt ? existing.actions?.find(old=>old.id===a.id) : null;
+      return {id:a.id || randomUUID(),description:String(a.description||''),owner:String(a.owner||''),email:String(a.email||''),dueDate:String(a.dueDate||''),status:'Open',responses:prior?.responses || [],responseDueDate:prior?.responseDueDate || ''};
+    });
     next.recommendation=next.actions.map(a=>a.description).join('\n\n');
     if (status === 'Open') {
       if (!String(next.finding || '').trim()) reject('Observation / Finding is required before finalizing.',400);

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { applyAuditWrite, actionsFor } from './audit-permissions.mjs';
+import { applyAuditWrite, actionsFor, assertFinalizedAuditWrite } from './audit-permissions.mjs';
 export const findingFields = ['finding','impact','department','area','priority','location','reference','auditYear'];
 export const actionFields = ['description','owner','email','dueDate'];
 const pick = (obj, fields) => Object.fromEntries(fields.map(key => [key, String(obj?.[key] || '')]));
@@ -15,6 +15,7 @@ export function prepareMobileWrite(actor, request, existing, options = {}) {
     if (receipt.digest !== digest) reject('This operation ID was already used for a different change.',409);
     return {entry:existing, duplicate:true};
   }
+  assertFinalizedAuditWrite(actor, patch, existing, options);
   let authorized;
   if (patch.operation === 'update-finding' && existing?.status === 'Draft' && options.drafts) {
     reject('Reopen this draft in the webapp to edit or finalize it.',409);
@@ -38,7 +39,8 @@ export function prepareMobileWrite(actor, request, existing, options = {}) {
     if (patch.operation === 'add-action' && /^[a-f0-9-]{36}$/.test(patch.action?.id || '')) authorized.actions.at(-1).id = patch.action.id;
     if (!existing && Array.isArray(patch.actions)) authorized.actions.forEach((action,i)=>{if(/^[a-f0-9-]{36}$/.test(patch.actions[i]?.id||''))action.id=patch.actions[i].id;});
   }
-  if ((authorized.observationImages?.length||0)>12) reject('A finding supports up to 12 evidence photos.',400);
+  const addedPhotos = !existing ? (authorized.observationImages?.length||0) : patch.operation === 'update-finding' ? (patch.newImages?.length||0) : 0;
+  if (addedPhotos>12) reject('A mobile capture supports up to 12 new evidence photos per upload.',400);
   authorized.mobileOperations = [...(existing?.mobileOperations||[]),{id:operationId,userId:actor.userId,digest}];
   return {entry:authorized,duplicate:false};
 }

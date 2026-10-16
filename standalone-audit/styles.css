@@ -4699,3 +4699,16 @@ h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
  .audit-company-picker .field { max-width: none; }
  .audit-company-save { flex-direction: column; align-items: stretch; }
 }
+
+.audit-assignee-preview {
+  margin: 1.25rem 0 0;
+  padding: 1rem;
+  border: 1px dashed #b8cbbb;
+  border-radius: 12px;
+  background: #f4f7f4;
+  min-width: 0;
+}
+.audit-assignee-preview legend { padding: 0 .4rem; font-weight: 600; color: #597160; }
+.audit-assignee-preview textarea { width: 100%; box-sizing: border-box; }
+.audit-assignee-preview .audit-update-photo-actions { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: .75rem; }
+.audit-assignee-preview :disabled { cursor: not-allowed; opacity: .7; }

@@ -15,7 +15,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {createAuditEntry,listAuditEntries,auditReportDefaults} from '../audit/audit-store.mjs';
-import {auditIdentity,auditUserInCompany,auditAssignees,validateAuditAssignees,applyAuditWrite,hashAuditPassword,verifyAuditPassword} from '../audit/audit-permissions.mjs';
+import {authorizeDraftDeletion,auditIdentity,auditUserInCompany,auditAssignees,validateAuditAssignees,applyAuditWrite,hashAuditPassword,verifyAuditPassword} from '../audit/audit-permissions.mjs';
 import {prepareMobileWrite} from '../audit/mobile-sync.mjs';
 
 const __dirname=path.dirname(fileURLToPath(import.meta.url));
@@ -243,10 +243,24 @@ async function handle(req,res){
       const listing=await indexedReportListing(dataDir,context,url.searchParams);
       return send(req,res,200,{...listing,items:listing.items.map(entry=>({...entry,timeZone:entryTimeZone(entry)}))});
     }
+    if (req.method === "DELETE") {
+      const patch = await bodyJson(req);
+      if(typeof patch.id !== 'string' || !patch.id.trim())return badRequest(req,res,'Select a saved draft to delete.');
+      const file=path.join(dataDir,'audit-entries.json');
+      const entries=await readJson(file);
+      const existing=entries.find(entry=>entry.projectId===projectId && entry.id===patch.id);
+      if(existing)requireCompany(existing.entity || context.company.name);
+      authorizeDraftDeletion(auditActor,existing,patch.baseUpdatedAt);
+      // Keep a private recovery copy and media; never delete potentially shared photos.
+      await atomicJson(path.join(dataDir,'deleted-drafts',crypto.randomUUID()+'.json'),{deletedAt:new Date().toISOString(),deletedBy:auditActor.userId,entry:existing});
+      await atomicJson(file,entries.filter(entry=>entry!==existing));
+      return send(req,res,200,{deleted:true,id:existing.id});
+    }
     if (req.method === "POST") {
       try {
         const patch = await bodyJson(req);
         const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === patch.id);
+        if(patch.operation==='save-draft' && !existing)fail('Draft not found. It may have been deleted.',404);
         requireCompany(existing?.entity || patch.entity);
         if(!existing || existing.status==='Draft'){patch.entity=requireCompany(patch.entity || existing?.entity);delete patch.sourceReport;}
         validateAuditAssignees(patch, auditUsers, [admin.name], assignmentOptions(existing?.status==='Draft' ? patch : existing || patch));

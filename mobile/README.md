@@ -1,6 +1,6 @@
 # AgIntel Audit — Android test app
 
-Android 8+ with an up-to-date Android System WebView. Test package `ai.agrinexus.audit`, version `0.1.0-test`. The APK connects to `https://fm2.digitalpalm.ai` and bundles the mobile UI locally so it can reopen offline.
+Android 8+ with an up-to-date Android System WebView. Test package `ai.agrinexus.audit`, version `0.3.0-test`. The APK connects to `https://audit.digitalpalm.ai` and bundles the mobile UI locally so it can reopen offline.
 
 ## Field test
 
@@ -15,7 +15,7 @@ Only Audit modules appear. Administrator-only user/role management stays in the 
 
 ## Local mockup
 
-Run the existing server with a **separate test database**, then open `/mobile-app/index.html`. “Explore local mockup” uses fictional sample data and never sends changes to the server. The account screen switches among sample creator, action author and respondent roles. The browser shell supports offline reload after service-worker installation; the APK needs no service worker.
+Run the isolated synthetic fixture described in `PROGRAMMER-HANDOVER.md`, then open `/mobile-app/index.html`. “Explore local mockup” uses fictional sample data and never sends changes to the server. The account screen switches among sample creator, action author and respondent roles. The browser shell supports offline reload after service-worker installation; the APK needs no service worker.
 
 ## Build
 
@@ -24,7 +24,7 @@ Use JDK 17, Android SDK platform 35 and Gradle 8.13:
 ```sh
 cd mobile/android
 # ANDROID_HOME and JAVA_HOME must point to the installed SDK and JDK.
-gradle :app:assembleDebug :app:lintDebug
+./gradlew :app:assembleDebug :app:lintDebug
 ```
 
 Output: `app/build/outputs/apk/debug/app-debug.apk`. Debug signing is for installation/testing, not Play Store release. The repository contains no passwords or signing keys.

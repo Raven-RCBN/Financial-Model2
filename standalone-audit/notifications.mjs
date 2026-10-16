@@ -6,13 +6,23 @@ import {fileURLToPath} from 'node:url';
 import {entryTimeZone,locationTimeZone,fallbackTimeZone} from './timezone.mjs';
 import {auditToday,auditUserInCompany} from '../audit/audit-permissions.mjs';
 const email = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value || '');
-export const workflowOptions = {drafts:true,timeZone:fallbackTimeZone};
+export const workflowOptions = {drafts:true,lockFinalized:true,timeZone:fallbackTimeZone};
 // Validate the configured IANA zone at startup, rather than fail during a write.
 auditToday(new Date(), workflowOptions.timeZone);
 export function enrollNotifications(entry, existing, actor, now = new Date()) {
   entry.timeZone = existing?.status !== 'Draft' && existing ? entryTimeZone(existing) : locationTimeZone(entry.geo);
   entry.creatorEmail = existing?.creatorEmail || (entry.createdBy === actor.userId ? actor.email : '') || '';
   entry.finalizedAt = existing?.finalizedAt || (entry.status !== 'Draft' ? now.toISOString() : '');
+  // Lifecycle metadata is server-owned; never accept caller-supplied notices.
+  entry.reopenedAt = existing?.reopenedAt || '';
+  entry.reopenedBy = existing?.reopenedBy || '';
+  entry.lifecycleNotice = existing?.lifecycleNotice || null;
+  const reopening=existing && existing.status!=='Draft' && entry.status==='Draft' && actor.admin;
+  const refinalizing=existing?.status==='Draft' && existing.reopenedAt && entry.status!=='Draft';
+  if(reopening){entry.reopenedAt=now.toISOString();entry.reopenedBy=actor.userId;}
+  if(reopening || refinalizing){
+    entry.lifecycleNotice={revision:randomUUID(),type:reopening?'reopened':'refinalized',at:now.toISOString(),assignees:((reopening?existing.actions:entry.actions) || []).map(a=>({name:a.owner,email:a.email}))};
+  }
   entry.actions = (entry.actions || []).map(action => {
     const prior = existing?.status !== 'Draft' && existing?.actions?.find(a=>a.id === action.id);
     const changed = !prior || ['email','owner','dueDate','description'].some(k=>action[k] !== prior[k]);
@@ -23,16 +33,25 @@ export function enrollNotifications(entry, existing, actor, now = new Date()) {
 export function notificationJobs(entries, directories, adminEmail, now = new Date(), fallbackZone = workflowOptions.timeZone) {
   const jobs=[];
   for(const entry of entries){
-    if(entry.status === 'Draft')continue;
     const timeZone=entry.timeZone || (entry.geo ? entryTimeZone(entry) : fallbackZone),today=auditToday(now,timeZone);
     const users=directories[entry.projectId] || [];
     const creator=users.find(u=>u.name === entry.createdBy && u.status === 'Active');
     const creatorEmail=creator?.email || (entry.createdBy === 'admin' ? adminEmail : '') || entry.creatorEmail;
+    const notice=entry.lifecycleNotice;
+    if(notice?.revision && ['reopened','refinalized'].includes(notice.type)){
+      const recipients=[creatorEmail,...(notice.assignees || []).filter(a=>users.some(u=>u.name===a.name && u.status==='Active' && String(u.email).toLowerCase()===String(a.email).toLowerCase() && auditUserInCompany(u,entry.entity))).map(a=>a.email)];
+      const label=notice.type==='reopened'?'Audit item reopened as draft':'Updated audit item finalized';
+      for(const to of new Set(recipients.filter(email).map(v=>v.toLowerCase()))){
+        const key=createHash('sha256').update(JSON.stringify([entry.projectId,entry.id,notice.revision,notice.type,to])).digest('hex');
+        jobs.push({key,to,type:notice.type,entryId:entry.id,subject:`${label} — ${entry.entity || 'Audit'}`,text:`${label}\n\nCompany: ${entry.entity || ''}\nReport year: ${entry.auditYear || ''}\nFinding: ${entry.finding || ''}\nCreated by: ${entry.createdBy}\nChanged at: ${notice.at}\n\n${notice.type==='reopened'?'The creator can revise the draft. Assigned-user corrective-action updates are paused until it is finalized again.':'The updated item is ready. Review your recommendations and deadlines in View & Report and record your corrective actions.'}\n\nhttps://audit.digitalpalm.ai/app`});
+      }
+    }
+    if(entry.status === 'Draft')continue;
     for(const action of entry.actions || []){
       if(!action.notificationRevision || !action.assignedAt || !email(action.email))continue;
       const assignee=users.find(u=>u.name===action.owner && u.status==='Active' && u.email.toLowerCase()===action.email.toLowerCase());
       if(!assignee || !auditUserInCompany(assignee,entry.entity))continue;
-      const types=['assigned'];
+      const types=notice?.type==='refinalized' && action.assignedAt===notice.at ? [] : ['assigned'];
       const days=Math.round((Date.parse(action.dueDate)-Date.parse(today))/86400000);
       if(entry.status!=='Closed' && action.status!=='Closed'){
         if(days>0 && days<=2)types.push('reminder');
@@ -45,7 +64,7 @@ export function notificationJobs(entries, directories, adminEmail, now = new Dat
         for(const to of recipients){
           const key=createHash('sha256').update(JSON.stringify([entry.projectId,entry.id,action.id,action.notificationRevision,type,to])).digest('hex');
           const label=type==='assigned'?'New audit item assigned':type==='due'?'Audit action due today':'Audit action due soon';
-          jobs.push({key,to,subject:`${label} — ${entry.entity || 'Audit'}`,text:`${label}\n\nCompany: ${entry.entity || ''}\nReport year: ${entry.auditYear || ''}\nFinding: ${entry.finding || ''}\nCorrective action: ${action.description}\nResponsible person: ${action.owner}\nCreated by: ${entry.createdBy}\nDue date: ${action.dueDate} (${timeZone})\n\nUpdate progress and upload evidence in View & Report:\nhttps://audit.digitalpalm.ai/app\n\nResponsible-person updates lock after the due date. An administrator can extend the deadline.`,entryId:entry.id,type});
+          jobs.push({key,to,subject:`${label} — ${entry.entity || 'Audit'}`,text:`${label}\n\nCompany: ${entry.entity || ''}\nReport year: ${entry.auditYear || ''}\nFinding: ${entry.finding || ''}\nRecommendation: ${action.description}\nResponsible person: ${action.owner}\nCreated by: ${entry.createdBy}\nDue date: ${action.dueDate} (${timeZone})\n\nRecord the corrective action taken and upload evidence in View & Report:\nhttps://audit.digitalpalm.ai/app\n\nResponsible-person updates lock after the due date. An administrator can extend the deadline.`,entryId:entry.id,type});
         }
       }
     }

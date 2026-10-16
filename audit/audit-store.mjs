@@ -436,7 +436,6 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
         description: String(item.description || ""),
       }))
       .filter((item) => item.dataUrl || item.url)
-      .slice(0, 12)
     : [];
   return {
     id: String(entry.id || `audit_${randomUUID()}`),
@@ -446,6 +445,9 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
     timeZone: String(entry.timeZone || ""),
     creatorEmail: String(entry.creatorEmail || ''),
     finalizedAt: String(entry.finalizedAt || ''),
+    reopenedAt: String(entry.reopenedAt || ''),
+    reopenedBy: String(entry.reopenedBy || ''),
+    lifecycleNotice: entry.lifecycleNotice ? structuredClone(entry.lifecycleNotice) : null,
     mobileOperations: Array.isArray(entry.mobileOperations) ? entry.mobileOperations.filter(item => item && typeof item.id === "string" && typeof item.userId === "string" && typeof item.digest === "string").map(({id,userId,digest})=>({id,userId,digest})) : [],
     entity: String(entry.entity || entry.companyName || ""),
     department: String(entry.department || "Unassigned"),

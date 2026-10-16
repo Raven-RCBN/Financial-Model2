@@ -26,7 +26,7 @@ public class MainActivity extends Activity {
  @Override public void onCreate(Bundle state){
   super.onCreate(state);web=new WebView(this);web.setBackgroundColor(0xfff1f7f1);setContentView(web);
   web.setOnApplyWindowInsetsListener((view,insets)->{view.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets.consumeSystemWindowInsets();});
-  WebSettings settings=web.getSettings();settings.setUserAgentString(settings.getUserAgentString()+" AgIntelAndroid/0.1.0");settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(true);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setGeolocationEnabled(true);
+  WebSettings settings=web.getSettings();settings.setUserAgentString(settings.getUserAgentString()+" AgIntelAndroid/"+BuildConfig.VERSION_NAME);settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);settings.setAllowFileAccess(false);settings.setAllowContentAccess(true);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setGeolocationEnabled(true);
   CookieManager.getInstance().setAcceptCookie(true);CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
   web.setWebViewClient(new WebViewClient(){
    @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
