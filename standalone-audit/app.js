@@ -646,6 +646,12 @@ function readAuditActionDrafts() {
 function companyAssignees(company = auditEntityValue()) {
   return (state.auditAssignees || []).filter(user=>user.canRespond && (user.companyScope!=='selected' || user.companies?.includes(company)));
 }
+async function refreshAuditAssignees() {
+  const access=await requestJson(`/api/projects/${PROJECT_ID}/audit-access`);
+  state.auditAssignees=access.assignees || [];
+  state.auditIdentity=access.identity;
+  state.auditUsers=access.users || [];
+}
 function renderAuditAssignee(action = {}, draft = false, company = auditEntityValue()) {
   const users = companyAssignees(company);
   const match = users.find(user => user.name === action.owner && user.email === action.email);
@@ -834,6 +840,7 @@ function renderAuditEntry(entries) {
           ${auditPermission("recommend") ? `<section class="audit-actions-editor">
             <h4>Recommendations</h4>
             <p>Assign a responsible person, email and due date to each action. Record responses below each action.</p>
+            <p>${companyAssignees().length} eligible assignees for ${escapeHtml(auditEntityValue())}, including All companies users. <button type="button" class="secondary-button" id="refreshAuditAssignees">Refresh assignees</button></p>
             ${(draft.actions?.length ? draft.actions : [{id: crypto.randomUUID(), description: draft.recommendation || "", status: "Open"}]).map(renderAuditActionDraft).join("")}
             <button type="button" class="secondary-button" id="addAuditAction">Add recommendation</button>
           </section>` : '<p class="field wide">The recommendation author will add recommendations after this finding is saved.</p>'}
@@ -1474,7 +1481,21 @@ function bindAuditEvents() {
     state.auditPage = 1;
     renderAudit();
   });
-  bindEvent("#auditEntity", "change", async event => {if(state.selectedAuditPanel==='entry')captureAuditDraftFields();updateAuditEntity(event.target.value);state.auditPage=1;state.auditSearch='';await renderAudit();});
+  bindClick("#refreshAuditAssignees", async () => {
+    captureAuditDraftFields();
+    const button=qs('#refreshAuditAssignees');button.disabled=true;button.textContent='Refreshing…';
+    try {await refreshAuditAssignees();captureAuditDraftFields();await renderAudit();}
+    catch(error){window.alert(`Could not refresh assignees: ${error.message}`);button.disabled=false;button.textContent='Refresh assignees';}
+  });
+  bindEvent("#auditEntity", "change", async event => {
+    const company=event.target.value;
+    if(state.selectedAuditPanel==='entry')captureAuditDraftFields();
+    try {await refreshAuditAssignees();}
+    catch(error){window.alert(`Could not refresh assignees: ${error.message}. Showing the last loaded directory.`);}
+    if(qs('#auditEntity')?.value!==company)return;
+    if(state.selectedAuditPanel==='entry')captureAuditDraftFields();
+    updateAuditEntity(company);state.auditPage=1;state.auditSearch='';await renderAudit();
+  });
   bindEvent("#auditReportYear", "change", (event) => {
     state.auditYear = event.target.value || "2025";
     state.auditPage = 1;

@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import vm from 'node:vm';
+const source=await fs.readFile(new URL('../standalone-audit/app.js',import.meta.url),'utf8');
+const functions=source.slice(source.indexOf('function companyAssignees('),source.indexOf('function renderAuditActionDraft('));
+test('refresh replaces stale directory and renders only current-company respondents and all-company users',async()=>{
+ const state={auditAssignees:[]};let fail=false;
+ const users=[{id:'ore',name:'ORE respondent',email:'ore@example.test',canRespond:true,companyScope:'selected',companies:['ORE']},{id:'oban',name:'OBAN respondent',email:'oban@example.test',canRespond:true,companyScope:'selected',companies:['OBAN']},{id:'all',name:'All-company respondent',email:'all@example.test',canRespond:true,companyScope:'all'},{id:'creator',name:'Creator only',canRespond:false,companyScope:'all'}];
+ const context=vm.createContext({state,PROJECT_ID:'p',auditEntityValue:()=> 'ORE',escapeHtml:v=>String(v),requestJson:async url=>{assert.equal(url,'/api/projects/p/audit-access');if(fail)throw Error('Network unavailable');return {assignees:users,identity:{userId:'milo',recommend:true},users:[]};}});
+ vm.runInContext(functions,context);
+ await context.refreshAuditAssignees();
+ assert.deepEqual(Array.from(context.companyAssignees(),u=>u.id),['ore','all']);
+ assert.deepEqual(Array.from(context.companyAssignees('OBAN'),u=>u.id),['oban','all']);
+ const html=context.renderAuditAssignee({owner:'ORE respondent',email:'ore@example.test'},true);
+ assert(html.includes('ORE respondent'));assert(html.includes('All-company respondent'));assert(!html.includes('OBAN respondent'));assert(!html.includes('Creator only'));assert(html.includes('selected'));
+ users.push({id:'new',name:'New ORE respondent',email:'new@example.test',canRespond:true,companyScope:'selected',companies:['ORE']});
+ await context.refreshAuditAssignees();assert.equal(context.companyAssignees().length,3);
+ fail=true;await assert.rejects(context.refreshAuditAssignees(),/Network unavailable/);assert.equal(context.companyAssignees().length,3);
+});

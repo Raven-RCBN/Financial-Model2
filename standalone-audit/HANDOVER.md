@@ -366,3 +366,22 @@ Deployed only notifications.mjs and restarted Audit; local service health passed
 Source backup: /home/deploy_audit/backups/before-reminder-subject-20261019.
 Installed SHA256: d992f171ee0fff21d395f5ffe41ac46708225dea5f65ea5c8e5f12298c12034a.
 No records or delivery ledger were reset, and no manual resend was performed.
+
+## 19 October 2026 — company assignee refresh
+
+Investigated missing ORE recommendation choices for Milo. Read-only live checks
+confirmed Milo is active with all-company and recommendation permissions, and 21
+ORE-eligible respondents exist (including all-company users). Frontend and shared
+permission-module hashes matched Git. No directory data or access was changed.
+The page previously retained its sign-in directory for its entire lifetime.
+Company changes now fetch current assignment choices; Recommendations includes a
+Refresh assignees button and eligible-company count. Refresh preserves typed
+recommendation text and valid selections. Network failure retains the prior list
+and displays an error. The original user-side empty dropdown was not reproduced
+in Milo's live browser; this update addresses the stale-page path found in code.
+
+Four focused tests passed. Browser verification with an isolated synthetic creator
+confirmed company filtering, newly added-user refresh, email autofill, preservation
+of typed text/selection, and clearing cross-company assignments on company switch.
+Only app.js deployed, backup /home/deploy_audit/backups/before-assignee-refresh-20261019.
+No restart or data migration required; app.js is served afresh on each request.
