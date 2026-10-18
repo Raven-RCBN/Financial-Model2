@@ -342,3 +342,11 @@ Completed the creator-only batch: 14 SMTP-accepted previews, zero failures/skips
 zero assignee recipients, and byte-for-byte unchanged entries. Receipt ledger is
 /home/deploy_audit/backups/creator-draft-preview-20261019.json. SMTP acceptance is
 verified; the creator's inbox was not accessed. Test subjects begin TEST ONLY.
+
+All future outgoing emails now end with: "Do not reply to this email. This is a
+system-generated email." The shared SMTP helper appends the notice to plain text
+and HTML, including manual previews. Mocked SMTP checks verified both alternatives.
+Deployed send_mail.py atomically after baseline and package checksum verification;
+backup /home/deploy_audit/backups/before-email-footer-20261019/send_mail.py.
+Health passed. No restart was needed because each send launches the helper afresh.
+No existing emails were resent for this footer-only change.

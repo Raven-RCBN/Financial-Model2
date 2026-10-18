@@ -1,5 +1,5 @@
 """SMTP delivery for the private Audit queue. Secrets are read only from environment."""
-import json, os, smtplib, ssl, sys
+import json, os, re, smtplib, ssl, sys
 from email.message import EmailMessage
 from email.utils import formatdate
 job = json.load(sys.stdin)
@@ -9,9 +9,13 @@ msg['To'] = job['to']
 msg['Subject'] = job['subject']
 msg['Date'] = formatdate(localtime=False)
 msg['Message-ID'] = '<audit-' + job['key'] + '@audit.digitalpalm.ai>'
-msg.set_content(job['text'])
+notice = 'Do not reply to this email. This is a system-generated email.'
+msg.set_content(job['text'].rstrip() + '\n\n' + notice)
 if job.get('html'):
-    msg.add_alternative(job['html'], subtype='html')
+    footer = '<p style="max-width:720px;margin:24px auto;padding:16px 24px;border-top:1px solid #dce7db;color:#647568;font-size:12px">' + notice + '</p>'
+    body = job['html']
+    body = re.sub(r'</body\s*>', lambda match: footer + match.group(0), body, count=1, flags=re.IGNORECASE) if re.search(r'</body\s*>', body, re.IGNORECASE) else body + footer
+    msg.add_alternative(body, subtype='html')
 host = os.environ['AUDIT_SMTP_HOST']
 mode = os.environ.get('AUDIT_SMTP_SECURITY', 'starttls')
 if mode not in ('ssl', 'starttls'):
