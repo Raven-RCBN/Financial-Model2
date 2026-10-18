@@ -289,3 +289,31 @@ Preflight matched live files to the previous Git version with standalone import
 and storage transforms. Restarted audit-web.service only. Installed hashes and
 public HTTPS health passed for audit.digitalpalm.ai and audit.agrinexus.ai.
 Records, directory, settings and uploaded-photo fingerprints remained unchanged.
+
+## 18 October 2026 — email alert review and Audit mailbox switch
+
+Reviewed the reported message against its specific live record on the server;
+company, year, finding and recommendation matched the saved values. No record
+correction was made. Alert templates now consistently include item identity,
+company/year, department/area/location, finding/impact, recommendations, assignee
+email and deadline/timezone, including reopened/refinalized notices. Multipart
+HTML preserves safe B/I/U, with a complete plain-text alternative. Reminder days
+are exactly two days before and the due date. Worker sends freshly reread content,
+retains existing deduplication keys and logs entry/action IDs for future delivery
+diagnostics. Eleven workflow/content tests and mocked SMTP MIME checks passed.
+
+User instructed Audit-only credentials. Active sender, SMTP username and admin
+reminder fallback are audit@agrinexus.ai, host mail.agrinexus.ai, port465 SSL/TLS.
+The Agrinexus Server chat verified the existing mailbox but twice confirmed that
+it has no mailbox password or private credential handoff. Removed the previous
+sender password from active app.env; AUDIT_SMTP_PASSWORD is empty. DELIVERY IS
+DISABLED pending the user's Audit mailbox credential. Do not restore/use the old
+sender or hosting portal credentials. No test email or SMTP login for this new
+mailbox has been performed. Once the password is supplied privately, verify TLS
+authentication, install only in server app.env, restart audit-web.service and
+verify a controlled test delivery before claiming mail is working.
+
+Deployed notifications.mjs and send_mail.py, source-only package SHA256
+a5c0a40c6a2b325b43f106e8301bf04a5d6ee3a626cd35f4016e8a6ed0686188.
+Private source/environment backup: /home/deploy_audit/backups/before-email-update-20261018.
+Audit health and installed hashes passed; records, users and settings unchanged.

@@ -5,8 +5,24 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {entryTimeZone,locationTimeZone,fallbackTimeZone} from './timezone.mjs';
 import {auditToday,auditUserInCompany} from '../audit/audit-permissions.mjs';
+import {renderStyledText} from '../audit/text-format.mjs';
 const email = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value || '');
 export const workflowOptions = {drafts:true,lockFinalized:true,timeZone:fallbackTimeZone};
+const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const mailLabels={assigned:'New audit item finalized and assigned',reminder:'Audit recommendation due in 2 days',due:'Audit recommendation due today',reopened:'Audit item reopened as draft',refinalized:'Updated audit item finalized'};
+export function notificationContent(entry,actions,type,timeZone) {
+  const label=mailLabels[type],company=entry.entity || 'Not recorded';
+  const details=[['Company',company],['Report year',entry.auditYear || 'Not recorded'],['Audit item',entry.id],['Department',entry.department || 'Not recorded'],['Audit area',entry.area || 'Not recorded'],['Location',entry.location || 'Not recorded'],['Priority',entry.priority || 'Not recorded'],['Item status',entry.status],['Created by',entry.createdBy || 'Not recorded']];
+  const finding=entry.finding || 'Not recorded',impact=entry.impact || 'Not recorded';
+  const instruction=type==='reopened'?'The creator can revise the draft. Assigned-user corrective-action updates are paused until it is finalized again.':'Review this company and report year in View & Report. Record the corrective action taken and upload supporting evidence. Responsible-person updates lock after the due date in the timezone shown; an administrator can extend the deadline.';
+  const link='https://audit.agrinexus.ai/app';
+  const actionDetails=actions.map((a,i)=>({heading:`Recommendation ${i+1}`,description:a.description || 'Not recorded',rows:[['Responsible person',a.owner || 'Not assigned'],['Responsible email',a.email || 'Not assigned'],['Due date',a.dueDate ? `${a.dueDate} (${timeZone})` : 'Not set'],['Action status',a.status || 'Open']],styles:a.descriptionStyles}));
+  const evidence=(entry.observationImages||[]).length || Number(Boolean(entry.photoUrl || entry.photoDataUrl));
+  const text=[label,details.map(([k,v])=>`${k}: ${v}`).join('\n'),`Observations / Findings:\n${finding}`,`Impact:\n${impact}`,...actionDetails.map(a=>`${a.heading}:\n${a.description}\n${a.rows.map(([k,v])=>`${k}: ${v}`).join('\n')}`),`Evidence images: ${evidence}. View photos in the signed-in webapp.`,instruction,link].join('\n\n');
+  const rows=items=>items.map(([k,v])=>`<tr><th align="left" style="padding:6px 14px 6px 0;vertical-align:top">${escapeHtml(k)}</th><td style="padding:6px 0">${escapeHtml(v)}</td></tr>`).join('');
+  const html=`<!doctype html><html><body style="font-family:Arial,sans-serif;color:#214d34;line-height:1.5"><main style="max-width:720px;margin:auto;padding:24px"><h1 style="font-size:22px">${escapeHtml(label)}</h1><table>${rows(details)}</table><h2 style="font-size:18px">Observations / Findings</h2><div>${renderStyledText(finding,entry.findingStyles)}</div><h2 style="font-size:18px">Impact</h2><div>${renderStyledText(impact,entry.impactStyles)}</div>${actionDetails.map(a=>`<section style="border-top:1px solid #dce7db;margin-top:20px"><h2 style="font-size:18px">${a.heading}</h2><div>${renderStyledText(a.description,a.styles)}</div><table>${rows(a.rows)}</table></section>`).join('')}<p>Evidence images: ${evidence}. View photos in the signed-in webapp.</p><p>${escapeHtml(instruction)}</p><p><a href="${link}">Open Audit — View &amp; Report</a></p></main></body></html>`;
+  return {subject:`${label} — ${company} — ${entry.auditYear || 'Year not recorded'}`.replace(/[\r\n]+/g,' '),text,html};
+}
 // Validate the configured IANA zone at startup, rather than fail during a write.
 auditToday(new Date(), workflowOptions.timeZone);
 export function enrollNotifications(entry, existing, actor, now = new Date()) {
@@ -40,10 +56,9 @@ export function notificationJobs(entries, directories, adminEmail, now = new Dat
     const notice=entry.lifecycleNotice;
     if(notice?.revision && ['reopened','refinalized'].includes(notice.type)){
       const recipients=[creatorEmail,...(notice.assignees || []).filter(a=>users.some(u=>u.name===a.name && u.status==='Active' && String(u.email).toLowerCase()===String(a.email).toLowerCase() && auditUserInCompany(u,entry.entity))).map(a=>a.email)];
-      const label=notice.type==='reopened'?'Audit item reopened as draft':'Updated audit item finalized';
       for(const to of new Set(recipients.filter(email).map(v=>v.toLowerCase()))){
         const key=createHash('sha256').update(JSON.stringify([entry.projectId,entry.id,notice.revision,notice.type,to])).digest('hex');
-        jobs.push({key,to,type:notice.type,entryId:entry.id,subject:`${label} — ${entry.entity || 'Audit'}`,text:`${label}\n\nCompany: ${entry.entity || ''}\nReport year: ${entry.auditYear || ''}\nFinding: ${entry.finding || ''}\nCreated by: ${entry.createdBy}\nChanged at: ${notice.at}\n\n${notice.type==='reopened'?'The creator can revise the draft. Assigned-user corrective-action updates are paused until it is finalized again.':'The updated item is ready. Review your recommendations and deadlines in View & Report and record your corrective actions.'}\n\nhttps://audit.digitalpalm.ai/app`});
+        jobs.push({key,to,type:notice.type,entryId:entry.id,...notificationContent(entry,entry.actions || [],notice.type,timeZone)});
       }
     }
     if(entry.status === 'Draft')continue;
@@ -54,7 +69,7 @@ export function notificationJobs(entries, directories, adminEmail, now = new Dat
       const types=notice?.type==='refinalized' && action.assignedAt===notice.at ? [] : ['assigned'];
       const days=Math.round((Date.parse(action.dueDate)-Date.parse(today))/86400000);
       if(entry.status!=='Closed' && action.status!=='Closed'){
-        if(days>0 && days<=2)types.push('reminder');
+        if(days===2)types.push('reminder');
         if(days===0)types.push('due');
       }
       for(const type of types){
@@ -63,8 +78,7 @@ export function notificationJobs(entries, directories, adminEmail, now = new Dat
         const recipients=[...new Set((type==='assigned' ? [action.email] : [action.email,creatorEmail]).filter(email).map(v=>v.toLowerCase()))];
         for(const to of recipients){
           const key=createHash('sha256').update(JSON.stringify([entry.projectId,entry.id,action.id,action.notificationRevision,type,to])).digest('hex');
-          const label=type==='assigned'?'New audit item assigned':type==='due'?'Audit action due today':'Audit action due soon';
-          jobs.push({key,to,subject:`${label} — ${entry.entity || 'Audit'}`,text:`${label}\n\nCompany: ${entry.entity || ''}\nReport year: ${entry.auditYear || ''}\nFinding: ${entry.finding || ''}\nRecommendation: ${action.description}\nResponsible person: ${action.owner}\nCreated by: ${entry.createdBy}\nDue date: ${action.dueDate} (${timeZone})\n\nRecord the corrective action taken and upload evidence in View & Report:\nhttps://audit.digitalpalm.ai/app\n\nResponsible-person updates lock after the due date. An administrator can extend the deadline.`,entryId:entry.id,type});
+          jobs.push({key,to,entryId:entry.id,actionId:action.id,type,...notificationContent(entry,[action],type,timeZone)});
         }
       }
     }
@@ -95,8 +109,9 @@ export function notificationWorker(dataDir,{send=smtpSend,enabled=mailConfigured
         if(prior?.sentAt || prior?.retryAt && prior.retryAt > now().toISOString())continue;
         // Re-read authoritative records before each delivery, so closure/reassignment cancels queued reminders.
         const current=notificationJobs(JSON.parse(await fs.readFile(path.join(dataDir,'audit-entries.json'),'utf8')),JSON.parse(await fs.readFile(path.join(dataDir,'audit-users.json'),'utf8')),process.env.AUDIT_ADMIN_EMAIL,now());
-        if(!current.some(j=>j.key===job.key))continue;
-        try{await send(job);ledger[job.key]={sentAt:now().toISOString(),type:job.type};lastError='';}
+        const fresh=current.find(j=>j.key===job.key);
+        if(!fresh)continue;
+        try{await send(fresh);ledger[job.key]={sentAt:now().toISOString(),type:fresh.type,entryId:fresh.entryId,actionId:fresh.actionId || ''};lastError='';}
         catch{ledger[job.key]={retryAt:new Date(now().getTime()+15*60000).toISOString(),type:job.type};lastError='Email delivery failed; retry scheduled.';}
         await save(ledger);
       }

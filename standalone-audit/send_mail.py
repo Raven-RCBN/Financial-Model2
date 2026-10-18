@@ -10,6 +10,8 @@ msg['Subject'] = job['subject']
 msg['Date'] = formatdate(localtime=False)
 msg['Message-ID'] = '<audit-' + job['key'] + '@audit.digitalpalm.ai>'
 msg.set_content(job['text'])
+if job.get('html'):
+    msg.add_alternative(job['html'], subtype='html')
 host = os.environ['AUDIT_SMTP_HOST']
 mode = os.environ.get('AUDIT_SMTP_SECURITY', 'starttls')
 if mode not in ('ssl', 'starttls'):
