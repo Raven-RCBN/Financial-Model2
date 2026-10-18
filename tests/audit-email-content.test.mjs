@@ -26,6 +26,17 @@ test('all alert types use the record company, full text, recommendation, assigne
 });
 test('reminders occur two days before and on due day in entry timezone, not one day before or after closing',()=>{
  const e=entry();
+ const reminders=notificationJobs([e],users,'',now).filter(j=>j.type==='reminder');
+ const due=notificationJobs([e],users,'',new Date('2026-10-19T23:00:00Z')).filter(j=>j.type==='due');
+ for(const [jobs,subject] of [[reminders,'REMINDER'],[due,'DUE TODAY']]){
+  assert.deepEqual(jobs.map(j=>j.to).sort(),['creator@example.test','owner@example.test']);
+  assert(jobs.every(j=>j.subject===`${subject} — JB FARMS ORE Plantation — 2025`));
+  assert.equal(jobs[0].text,jobs[1].text);
+  assert.equal(jobs[0].html,jobs[1].html);
+ }
+ // Only the timing heading differs; both alerts contain identical audit details.
+ assert.equal(reminders[0].text.split('\n\n').slice(1).join('\n\n'),due[0].text.split('\n\n').slice(1).join('\n\n'));
+ assert.equal(reminders[0].html.replace(/<h1[^>]*>.*?<\/h1>/,''),due[0].html.replace(/<h1[^>]*>.*?<\/h1>/,''));
  assert.equal(notificationJobs([e],users,'',new Date('2026-10-19T12:00:00Z')).filter(j=>j.type==='reminder').length,0);
  assert.equal(notificationJobs([e],users,'',new Date('2026-10-19T23:00:00Z')).filter(j=>j.type==='due').length,2);
  assert.equal(notificationJobs([e],users,'',new Date('2026-10-20T23:00:00Z')).length,0);

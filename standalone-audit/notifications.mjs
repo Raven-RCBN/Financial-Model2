@@ -21,7 +21,8 @@ export function notificationContent(entry,actions,type,timeZone) {
   const text=[label,details.map(([k,v])=>`${k}: ${v}`).join('\n'),`Observations / Findings:\n${finding}`,`Impact:\n${impact}`,...actionDetails.map(a=>`${a.heading}:\n${a.description}\n${a.rows.map(([k,v])=>`${k}: ${v}`).join('\n')}`),`Evidence images: ${evidence}. View photos in the signed-in webapp.`,instruction,link].join('\n\n');
   const rows=items=>items.map(([k,v])=>`<tr><th align="left" style="padding:6px 14px 6px 0;vertical-align:top">${escapeHtml(k)}</th><td style="padding:6px 0">${escapeHtml(v)}</td></tr>`).join('');
   const html=`<!doctype html><html><body style="font-family:Arial,sans-serif;color:#214d34;line-height:1.5"><main style="max-width:720px;margin:auto;padding:24px"><h1 style="font-size:22px">${escapeHtml(label)}</h1><table>${rows(details)}</table><h2 style="font-size:18px">Observations / Findings</h2><div>${renderStyledText(finding,entry.findingStyles)}</div><h2 style="font-size:18px">Impact</h2><div>${renderStyledText(impact,entry.impactStyles)}</div>${actionDetails.map(a=>`<section style="border-top:1px solid #dce7db;margin-top:20px"><h2 style="font-size:18px">${a.heading}</h2><div>${renderStyledText(a.description,a.styles)}</div><table>${rows(a.rows)}</table></section>`).join('')}<p>Evidence images: ${evidence}. View photos in the signed-in webapp.</p><p>${escapeHtml(instruction)}</p><p><a href="${link}">Open Audit — View &amp; Report</a></p></main></body></html>`;
-  return {subject:`${label} — ${company} — ${entry.auditYear || 'Year not recorded'}`.replace(/[\r\n]+/g,' '),text,html};
+  const subjectLabel=type==='reminder'?'REMINDER':type==='due'?'DUE TODAY':label;
+  return {subject:`${subjectLabel} — ${company} — ${entry.auditYear || 'Year not recorded'}`.replace(/[\r\n]+/g,' '),text,html};
 }
 // Validate the configured IANA zone at startup, rather than fail during a write.
 auditToday(new Date(), workflowOptions.timeZone);

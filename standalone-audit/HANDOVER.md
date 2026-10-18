@@ -350,3 +350,19 @@ Deployed send_mail.py atomically after baseline and package checksum verificatio
 backup /home/deploy_audit/backups/before-email-footer-20261019/send_mail.py.
 Health passed. No restart was needed because each send launches the helper afresh.
 No existing emails were resent for this footer-only change.
+
+## 19 October 2026 — reminder and due-date subjects
+
+Verified the live schedule sends reminders exactly two calendar days before the
+deadline and on its due date in the item's timezone. Both go to the active
+assigned respondent and creator, deduplicating identical addresses. Draft and
+closed items/actions remain excluded. Subjects now start REMINDER and DUE TODAY
+respectively, followed by company and report year. Both contain the same complete
+audit details; only their timing heading differs. Sender remains audit@agrinexus.ai.
+
+All 11 notification/workflow tests passed, including exact recipients, subjects,
+matching plain/HTML content, timezone boundaries and persisted deduplication.
+Deployed only notifications.mjs and restarted Audit; local service health passed.
+Source backup: /home/deploy_audit/backups/before-reminder-subject-20261019.
+Installed SHA256: d992f171ee0fff21d395f5ffe41ac46708225dea5f65ea5c8e5f12298c12034a.
+No records or delivery ledger were reset, and no manual resend was performed.
