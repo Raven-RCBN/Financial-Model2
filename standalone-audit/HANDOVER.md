@@ -317,3 +317,28 @@ Deployed notifications.mjs and send_mail.py, source-only package SHA256
 a5c0a40c6a2b325b43f106e8301bf04a5d6ee3a626cd35f4016e8a6ed0686188.
 Private source/environment backup: /home/deploy_audit/backups/before-email-update-20261018.
 Audit health and installed hashes passed; records, users and settings unchanged.
+
+## 19 October 2026 — Audit mailbox enabled
+
+The user supplied the existing Audit mailbox credential. Verified TLS SMTP
+authentication before installing it only in the server's mode0600 app.env, then
+restarted audit-web.service. SMTP username/from and admin reminder fallback remain
+audit@agrinexus.ai. The previous missing-password delivery block is resolved.
+No mailbox credential is stored in Git or this handover.
+
+One clearly labelled synthetic test was sent from Audit to its own mailbox.
+Read-only IMAP verification located that exact Message-ID in INBOX, confirmed the
+sender/recipient, plain+HTML alternatives and company/finding/recommendation/due
+date content. The live worker reported configured=true, a successful run and no
+lastError. Public HTTPS health passed. No audit record was created by this test.
+
+A server-only review found all 14 entries for report year2026 were ORE drafts;
+there were no prior2026 alert deliveries. The user approved draft-preview tests,
+then explicitly limited recipients to creators only. Assigned users must not be
+emailed for that test batch and entries must remain drafts. The one-off server
+script has a separate private receipt ledger to avoid duplicates on retry; it
+does not reset the production alert ledger or activate draft notifications.
+Completed the creator-only batch: 14 SMTP-accepted previews, zero failures/skips,
+zero assignee recipients, and byte-for-byte unchanged entries. Receipt ledger is
+/home/deploy_audit/backups/creator-draft-preview-20261019.json. SMTP acceptance is
+verified; the creator's inbox was not accessed. Test subjects begin TEST ONLY.
