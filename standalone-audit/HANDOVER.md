@@ -385,3 +385,9 @@ confirmed company filtering, newly added-user refresh, email autofill, preservat
 of typed text/selection, and clearing cross-company assignments on company switch.
 Only app.js deployed, backup /home/deploy_audit/backups/before-assignee-refresh-20261019.
 No restart or data migration required; app.js is served afresh on each request.
+
+Recommendation field alignment: reserve two label lines for the four desktop
+assignment controls, keeping inputs/selects at 44px and the same top position.
+Stacked mobile labels retain natural height. Verified in the synthetic creator UI
+with the email label wrapping. CSS-only deployment backed up under
+/home/deploy_audit/backups/before-recommendation-alignment-20261019.

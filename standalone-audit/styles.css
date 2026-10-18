@@ -4602,6 +4602,12 @@ h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
 .audit-action-reply { color: var(--ink); }
 .audit-actions-editor > p { margin: 8px 0 16px; color: var(--muted); font-size: 13px; }
 .audit-action-grid { gap: 14px; }
+.audit-actions-editor .audit-action-grid > .field:not(.audit-action-description) > span { min-height: 2.8em; line-height: 1.4; }
+.audit-actions-editor .audit-action-grid > .field input,
+.audit-actions-editor .audit-action-grid > .field select { height: 44px; min-height: 44px; }
+@media (max-width: 800px) {
+ .audit-actions-editor .audit-action-grid > .field:not(.audit-action-description) > span { min-height: 0; }
+}
 .audit-form-footer { padding: 18px 22px; background: #fafbf7; }
 .audit-context-panel { padding: 18px 22px; }
 .audit-context-panel p { font-weight: 400; }
