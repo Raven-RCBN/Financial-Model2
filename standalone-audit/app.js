@@ -1,3 +1,60 @@
+import {normalizeTextStyles,renderStyledText} from '/audit/text-format.mjs';
+
+const textStyleData = styles => escapeHtml(JSON.stringify(styles || []));
+function editorStyles(input) { try { return normalizeTextStyles(input?.value,JSON.parse(input?.dataset.textStyles || '[]')); } catch { return []; } }
+function readStyledEditor(editor) {
+  let text='',styles=[];
+  const add=(value,marks)=>{const start=Array.from(text).length;text+=value;const end=Array.from(text).length;if(end>start && Object.values(marks).some(Boolean))styles.push({start,end,...marks});};
+  const walk=(node,marks={})=>{
+    if(node.nodeType===3){add(node.nodeValue,marks);return;}
+    if(node.nodeType!==1)return;
+    if(node.tagName==='BR'){add('\n',marks);return;}
+    const next={bold:marks.bold || ['B','STRONG'].includes(node.tagName) || ['bold','700'].includes(node.style.fontWeight),italic:marks.italic || ['I','EM'].includes(node.tagName) || node.style.fontStyle==='italic',underline:marks.underline || node.tagName==='U' || node.style.textDecoration.includes('underline')};
+    if(['DIV','P'].includes(node.tagName) && node!==editor && text && !text.endsWith('\n'))add('\n',{});
+    node.childNodes.forEach(child=>walk(child,next));
+  };
+  editor.childNodes.forEach(n=>walk(n));
+  // Values are trimmed by existing forms; shift style ranges with the text.
+  const leading=Array.from(text).length-Array.from(text.trimStart()).length;
+  text=text.trim();styles=styles.map(s=>({...s,start:Math.max(0,s.start-leading),end:s.end-leading}));
+  return {text,styles:normalizeTextStyles(text,styles)};
+}
+function bindTextEditors() {
+  document.querySelectorAll('#auditFinding,#auditImpact,[data-action-field="description"],.audit-action-tracking textarea[name="description"],.audit-action-tracking textarea[name="text"],[data-observation-image-description]').forEach(input=>{
+    if(input._editor || input.disabled)return;
+    const label=input.closest('label')?.querySelector('span')?.textContent || 'Audit text';
+    const wrap=document.createElement('div');wrap.className='audit-text-composer';
+    const toolbar=document.createElement('div');toolbar.className='audit-text-toolbar';toolbar.setAttribute('role','group');toolbar.setAttribute('aria-label',label+' formatting');
+    const editor=document.createElement('div');editor.className='audit-text-editor';editor.contentEditable='true';editor.setAttribute('role','textbox');editor.setAttribute('aria-multiline','true');editor.setAttribute('aria-label',label);editor.dataset.editorFor=input.id || input.name || input.dataset.actionField || 'caption';editor.dataset.placeholder=input.placeholder || 'Enter text';
+    editor.innerHTML=renderStyledText(input.value,editorStyles(input));input._editor=editor;
+    const sync=()=>{const value=readStyledEditor(editor);input.value=value.text;input.dataset.textStyles=JSON.stringify(value.styles);input.dispatchEvent(new Event('input',{bubbles:true}));};
+    for(const [command,title,tag] of [['bold','Bold','b'],['italic','Italic','i'],['underline','Underline','u']]){
+      const button=document.createElement('button');button.type='button';button.title=title;button.setAttribute('aria-label',title);button.setAttribute('aria-pressed','false');button.innerHTML=`<${tag}>${title[0]}</${tag}>`;
+      button.addEventListener('mousedown',e=>e.preventDefault());
+      button.addEventListener('click',()=>{editor.focus();if(editor._range){const sel=window.getSelection();sel.removeAllRanges();sel.addRange(editor._range);}document.execCommand('styleWithCSS',false,false);document.execCommand(command);sync();remember();});toolbar.append(button);
+    }
+    const remember=()=>{const sel=window.getSelection();if(sel.rangeCount && editor.contains(sel.anchorNode)){editor._range=sel.getRangeAt(0).cloneRange();toolbar.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-pressed',String(document.queryCommandState(['bold','italic','underline'][i]))));}};
+    editor.addEventListener('input',()=>{sync();remember();});editor.addEventListener('keyup',remember);editor.addEventListener('mouseup',remember);editor.addEventListener('blur',remember);
+    editor.addEventListener('paste',e=>{e.preventDefault();document.execCommand('insertText',false,e.clipboardData.getData('text/plain'));sync();});
+    editor.addEventListener('drop',e=>e.preventDefault());
+    editor.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.execCommand('insertLineBreak');sync();}if((e.ctrlKey||e.metaKey) && ['b','i','u'].includes(e.key.toLowerCase())){e.preventDefault();toolbar.querySelectorAll('button')[['b','i','u'].indexOf(e.key.toLowerCase())].click();}});
+    input.hidden=true;input.required=false;input.insertAdjacentElement('afterend',wrap);wrap.append(toolbar,editor);
+  });
+}
+function bindImagePreviews() {
+  document.querySelectorAll('.audit-observation-report-images img,.audit-observation-image-card img,.audit-evidence-row img,.audit-photo-preview,[data-reply-previews] img').forEach(img=>{
+    if(img.dataset.enlargeBound)return;img.dataset.enlargeBound='true';img.tabIndex=0;img.setAttribute('role','button');img.setAttribute('aria-label','Enlarge '+(img.alt||'image'));img.title='Click to enlarge';
+    const open=()=>{
+      document.querySelector('#auditImageDialog')?.close();
+      const dialog=document.createElement('dialog');dialog.id='auditImageDialog';dialog.className='audit-image-dialog';dialog.setAttribute('aria-label','Enlarged audit image');
+      const header=document.createElement('header'),caption=document.createElement('span'),close=document.createElement('button'),photo=document.createElement('img'),viewport=document.createElement('div');
+      caption.textContent=img.closest('figure')?.querySelector('figcaption')?.textContent || img.alt || 'Audit image';close.type='button';close.className='secondary-button';close.textContent='Close';close.setAttribute('aria-label','Close image preview');photo.src=img.currentSrc||img.src;photo.alt=caption.textContent;viewport.className='audit-image-viewport';viewport.append(photo);header.append(caption,close);dialog.append(header,viewport);document.body.append(dialog);
+      dialog.addEventListener('close',()=>{dialog.remove();img.focus();});close.onclick=()=>dialog.close();dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});photo.onclick=()=>photo.classList.toggle('actual-size');dialog.showModal();close.focus();
+    };
+    img.addEventListener('click',open);img.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();open();}});
+  });
+}
+
 const auditPageCache = new Map();
 let auditRenderVersion = 0;
 // Audit-only frontend extracted for independent deployment.
@@ -481,7 +538,7 @@ function renderAuditObservationImages(images = []) {
       ${items.map((item, index) => `
         <figure>
           <img src="${escapeHtml(item.dataUrl || item.url)}" alt="Observation image ${index + 1}" />
-          <figcaption>${escapeHtml(item.description || item.name || `Observation image ${index + 1}`)}</figcaption>
+          <figcaption>${renderStyledText(item.description || item.name || `Observation image ${index + 1}`,item.descriptionStyles)}</figcaption>
         </figure>
       `).join("")}
     </div>
@@ -559,7 +616,7 @@ function sourceReportForSelection(){const report=projectSettings().auditSourceRe
 function renderSourceDetails(entry){
  if(!entry.sourceReport)return '';
  const r=entry.sourceReport;
- return `<section class="audit-source-details"><div><b>Management response</b><p class="multiline-text">${escapeHtml(r.managementResponse||'No response recorded.')}</p></div><p><b>Timeline:</b> ${escapeHtml(r.timeline||'Not specified')}</p>${r.tables?.length?`<details><summary>Supporting tables (${r.tables.length})</summary>${r.tables.map(t=>`<div class="audit-table-scroll"><table class="audit-table"><tbody>${t.rows.map(row=>`<tr>${row.map(cell=>`<td class="multiline-text">${escapeHtml(cell||'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`).join('')}</details>`:''}</section>`;
+ return `<section class="audit-source-details"><div><b>Management response</b><p class="multiline-text audit-report-text" tabindex="0">${escapeHtml(r.managementResponse||'No response recorded.')}</p></div><p><b>Timeline:</b> ${escapeHtml(r.timeline||'Not specified')}</p>${r.tables?.length?`<details><summary>Supporting tables (${r.tables.length})</summary>${r.tables.map(t=>`<div class="audit-table-scroll"><table class="audit-table"><tbody>${t.rows.map(row=>`<tr>${row.map(cell=>`<td class="multiline-text">${escapeHtml(cell||'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`).join('')}</details>`:''}</section>`;
 }
 
 function auditActionTiming(action) {
@@ -582,7 +639,7 @@ function auditActionsFor(entry) {
 function readAuditActionDrafts() {
   return Array.from(document.querySelectorAll("[data-audit-action-draft]")).map((card) => {
     const value = (key) => card.querySelector(`[data-action-field="${key}"]`)?.value.trim() || "";
-    return { id: card.dataset.auditActionDraft, description: value("description"), owner: value("owner"), email: value("email"), dueDate: value("dueDate"), status: value("status"), response: value("response"), responseDueDate: value("responseDueDate") };
+    return { id: card.dataset.auditActionDraft, description: value("description"), descriptionStyles: editorStyles(card.querySelector('[data-action-field="description"]')), owner: value("owner"), email: value("email"), dueDate: value("dueDate"), status: value("status"), response: value("response"), responseDueDate: value("responseDueDate") };
   });
 }
 
@@ -602,7 +659,7 @@ function renderAuditActionDraft(action, index) {
   return `<section class="audit-action-card" data-audit-action-draft="${escapeHtml(action.id)}">
     <header><b>Recommendation ${index + 1}</b>${index ? '<button type="button" class="secondary-button" data-remove-audit-action>Remove recommendation</button>' : ""}</header>
     <div class="audit-action-grid">
-      <label class="field audit-action-description"><span>Recommendation</span><textarea data-action-field="description" rows="3" required placeholder="State the recommendation. The assigned user will record the corrective action taken.">${escapeHtml(action.description || "")}</textarea></label>
+      <label class="field audit-action-description"><span>Recommendation</span><textarea data-text-styles="${textStyleData(action.descriptionStyles)}" data-action-field="description" rows="3" required placeholder="State the recommendation. The assigned user will record the corrective action taken.">${escapeHtml(action.description || "")}</textarea></label>
       ${renderAuditAssignee(action, true)}${input("Action due date", "dueDate", "date")}
       <label class="field"><span>Initial action status</span><input data-action-field="status" value="Open" readonly /></label>
     </div>
@@ -628,16 +685,16 @@ function renderAuditActionTracking(entry) {
     const followup = action.responseDueDate ? auditActionTiming({dueDate: action.responseDueDate, status: action.status}) : null;
     return `<section class="audit-action-card audit-action-${timing.tone}">
       <header><b>Recommendation ${index + 1}</b><span class="audit-action-badge">${escapeHtml(timing.label)}</span></header>
-      <p class="multiline-text">${escapeHtml(action.description)}</p>
+      <p class="multiline-text audit-report-text" tabindex="0">${renderStyledText(action.description,action.descriptionStyles)}</p>
       <div class="audit-response-row"><span><b>Responsible person</b>${escapeHtml(action.owner || "Unassigned")}</span><span><b>Email</b>${escapeHtml(action.email || "Not assigned")}</span><span><b>Action due date</b>${auditDateLabel(action.dueDate)} · ${escapeHtml(entry.timeZone || "Africa/Lagos")}</span><span><b>Status</b>${escapeHtml(action.status || "Open")}</span></div>
       ${state.currentSession?.role === "admin" ? `<details><summary>Edit recommendation / assignment</summary><form class="audit-update-action-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}"><div class="audit-action-grid">
-        <label class="field audit-action-description"><span>Recommendation</span><textarea name="description" required>${escapeHtml(action.description)}</textarea></label>
+        <label class="field audit-action-description"><span>Recommendation</span><textarea data-text-styles="${textStyleData(action.descriptionStyles)}" name="description" required>${escapeHtml(action.description)}</textarea></label>
         ${renderAuditAssignee(action,false,entry.entity || auditEntityValue())}
         <label class="field"><span>Action due date</span><input name="dueDate" type="date" value="${escapeHtml(action.dueDate || "")}" required /></label>
       </div><div class="audit-action-form-footer"><span role="status"></span><button type="submit" class="secondary-button">Save recommendation changes</button></div></form></details>` : ""}
       <h4>Corrective actions by assignee</h4>
       ${action.responseDueDate ? `<p class="audit-action-badge audit-action-${followup.tone}">Follow-up due: ${auditDateLabel(action.responseDueDate)} · ${escapeHtml(followup.label)}</p>` : ""}
-      ${(action.responses || []).map(reply => `<div class="audit-action-reply"><b>${escapeHtml(reply.author || "Recorded response")}</b><small>${escapeHtml(reply.email || "")} · ${escapeHtml(auditUpdateTime(reply.createdAt))} · Follow-up due: ${auditDateLabel(reply.dueDate)}</small><p class="multiline-text">${escapeHtml(reply.text)}</p>${reply.status?`<p>Status: ${escapeHtml(reply.status)}</p>`:""}${renderAuditObservationImages(reply.images||[])}</div>`).join("") || "<p>No corrective actions recorded yet.</p>"}
+      ${(action.responses || []).map(reply => `<div class="audit-action-reply"><b>${escapeHtml(reply.author || "Recorded response")}</b><small>${escapeHtml(reply.email || "")} · ${escapeHtml(auditUpdateTime(reply.createdAt))} · Follow-up due: ${auditDateLabel(reply.dueDate)}</small><p class="multiline-text audit-report-text" tabindex="0">${renderStyledText(reply.text,reply.textStyles)}</p>${reply.status?`<p>Status: ${escapeHtml(reply.status)}</p>`:""}${renderAuditObservationImages(reply.images||[])}</div>`).join("") || "<p>No corrective actions recorded yet.</p>"}
       ${canReplyToAuditAction(action) ? `<form class="audit-action-reply-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}">
         <p class="audit-update-note">Updating as ${escapeHtml(state.currentSession.userId)}. Date and time are recorded automatically when you save.</p>
         <div class="audit-action-grid">
@@ -672,6 +729,8 @@ function captureAuditDraftFields() {
     dueDate: valueFrom("#auditDueDate", state.auditDraftFields.dueDate || ""),
     reference: valueFrom("#auditReference", state.auditDraftFields.reference || ""),
     finding: valueFrom("#auditFinding", state.auditDraftFields.finding || ""),
+    findingStyles: editorStyles(qs("#auditFinding")),
+    impactStyles: editorStyles(qs("#auditImpact")),
     impact: valueFrom("#auditImpact", state.auditDraftFields.impact || ""),
     recommendation: valueFrom("#auditRecommendation", state.auditDraftFields.recommendation || ""),
   };
@@ -686,7 +745,7 @@ function renderAuditObservationImageCards(images = []) {
           <img src="${escapeHtml(item.dataUrl || item.url)}" alt="Observation attachment ${index + 1}" />
           <label>
             <span>Description</span>
-            <textarea class="audit-observation-image-description" data-observation-image-description="${index}" rows="2" placeholder="Describe what this image shows.">${escapeHtml(item.description || "")}</textarea>
+            <textarea data-text-styles="${textStyleData(item.descriptionStyles)}" class="audit-observation-image-description" data-observation-image-description="${index}" rows="2" placeholder="Describe what this image shows.">${escapeHtml(item.description || "")}</textarea>
           </label>
           <button type="button" class="audit-remove-observation-image" data-remove-observation-image="${index}">Remove</button>
         </article>
@@ -757,7 +816,7 @@ function renderAuditEntry(entries) {
           <label class="field wide audit-observation-field">
             <span>Observations / Findings</span>
             <div class="audit-observation-composer">
-              <textarea id="auditFinding" rows="4" placeholder="Write the audit issue observed in the field.">${escapeHtml(draft.finding || "")}</textarea>
+              <textarea data-text-styles="${textStyleData(draft.findingStyles)}" id="auditFinding" rows="4" placeholder="Write the audit issue observed in the field.">${escapeHtml(draft.finding || "")}</textarea>
               <div class="audit-observation-dropzone ${observationImages.length ? "has-image" : ""}" id="auditObservationDropzone" tabindex="0" role="button" aria-label="Add images inside observation or finding">
                 <div>
                   <b>${observationImages.length ? "Add more observation images" : "Drop images here"}</b>
@@ -770,7 +829,7 @@ function renderAuditEntry(entries) {
           </label>
           <label class="field wide">
             <span>Impact</span>
-            <textarea id="auditImpact" rows="3" placeholder="Describe operational, financial, safety, compliance, or quality impact.">${escapeHtml(draft.impact || "")}</textarea>
+            <textarea data-text-styles="${textStyleData(draft.impactStyles)}" id="auditImpact" rows="3" placeholder="Describe operational, financial, safety, compliance, or quality impact.">${escapeHtml(draft.impact || "")}</textarea>
           </label>
           ${auditPermission("recommend") ? `<section class="audit-actions-editor">
             <h4>Recommendations</h4>
@@ -961,10 +1020,10 @@ function renderAuditReport(entries) {
                     <div class="input-actions">${canEditAuditDraft(entry)?`<button type="button" class="secondary-button" data-edit-audit-draft="${escapeHtml(entry.id)}">Edit</button>`:""}${state.currentSession?.role === "admin" && entry.status !== "Draft" && !entry.sourceReport ? `<button type="button" class="secondary-button" data-reopen-audit="${escapeHtml(entry.id)}">Reopen as draft</button>` : ""}<b class="risk ${auditPriorityClass(entry.priority)}">${escapeHtml(entry.priority)}</b></div>
                   </header>
                   <div class="audit-finding-body">
-                    <div><b>Observations / Findings</b><span class="multiline-text">${escapeHtml(entry.finding || (entry.status === "Draft" ? "Untitled draft" : ""))}</span></div>
+                    <div><b>Observations / Findings</b><span class="multiline-text audit-report-text" tabindex="0">${renderStyledText(entry.finding || (entry.status === "Draft" ? "Untitled draft" : ""),entry.findingStyles)}</span></div>
                     ${renderAuditObservationImages(entry.observationImages)}
-                    <div><b>Impact</b><span class="multiline-text">${escapeHtml(entry.impact||'Not recorded.')}</span></div>
-                    <div><b>Recommendation</b><span class="multiline-text">${escapeHtml(entry.sourceReport?.originalRecommendation||entry.recommendation||'Not recorded.')}</span></div>
+                    <div><b>Impact</b><span class="multiline-text audit-report-text" tabindex="0">${renderStyledText(entry.impact||'Not recorded.',entry.impactStyles)}</span></div>
+                    <div><b>Recommendation</b><span class="multiline-text audit-report-text" tabindex="0">${entry.sourceReport ? escapeHtml(entry.sourceReport.originalRecommendation||'Not recorded.') : entry.actions?.length ? entry.actions.map(a=>renderStyledText(a.description,a.descriptionStyles)).join('<br><br>') : escapeHtml(entry.recommendation||'Not recorded.')}</span></div>
                     <div class="audit-response-row">
                       <span><b>Entity / Company</b>${escapeHtml(entry.entity || entry.companyName || reportEntity || "-")}</span>
                       <span><b>Owner</b>${escapeHtml(entry.owner || "-")}</span>
@@ -1076,6 +1135,7 @@ function refreshAuditObservationImageSection() {
   updateAuditObservationDropzoneLabel();
   bindAuditObservationImageControls();
   if (input) input.value = "";
+  bindTextEditors();bindImagePreviews();
 }
 
 let auditObservationImageJobs = 0;
@@ -1106,7 +1166,7 @@ async function addAuditObservationImages(files) {
 
 function updateAuditObservationImageDescription(index, description) {
   const item = state.auditObservationImages?.[index];
-  if (item) item.description = String(description || "");
+  if (item) {item.description = String(description || "");item.descriptionStyles=editorStyles(document.querySelector(`[data-observation-image-description="${index}"]`));}
 }
 
 function removeAuditObservationImage(index) {
@@ -1118,6 +1178,7 @@ function updateAuditPhotoPreview(fileName, sourceType) {
   const preview = qs(".audit-empty-photo, .audit-photo-preview");
   const status = qs("#auditPhotoStatus");
   if (preview) preview.outerHTML = `<img class="audit-photo-preview" src="${state.auditDraftImage}" alt="Audit evidence preview" />`;
+  bindImagePreviews();
   if (status) status.textContent = `${fileName} ready to save${sourceType === "camera" ? " with GPS tagging in progress." : "."}`;
 }
 
@@ -1273,7 +1334,7 @@ async function replyPhoto(file){
 function bindReplyPhotos(){
  document.querySelectorAll('.audit-action-reply-form').forEach(form=>{
  const feedback=form.querySelector('.audit-reply-status');form._replyImages=[];
- const preview=()=>{feedback.textContent=form._replyImages.length?'Photos ready to save with your update.':'';form.querySelector('[data-reply-photo-count]').textContent=form._replyImages.length?`${form._replyImages.length} of 8 photos selected`:'No photos selected';form.querySelector('[data-reply-previews]').innerHTML=form._replyImages.map((im,i)=>`<figure><img src="${im.dataUrl}" alt="Action evidence ${i+1}" /><figcaption>${escapeHtml(im.name)}</figcaption><button type="button" data-remove-reply-photo="${i}">Remove photo</button></figure>`).join('');form.querySelectorAll('[data-remove-reply-photo]').forEach(b=>b.onclick=()=>{form._replyImages.splice(Number(b.dataset.removeReplyPhoto),1);preview();});};
+ const preview=()=>{feedback.textContent=form._replyImages.length?'Photos ready to save with your update.':'';form.querySelector('[data-reply-photo-count]').textContent=form._replyImages.length?`${form._replyImages.length} of 8 photos selected`:'No photos selected';form.querySelector('[data-reply-previews]').innerHTML=form._replyImages.map((im,i)=>`<figure><img src="${im.dataUrl}" alt="Action evidence ${i+1}" /><figcaption>${escapeHtml(im.name)}</figcaption><button type="button" data-remove-reply-photo="${i}">Remove photo</button></figure>`).join('');form.querySelectorAll('[data-remove-reply-photo]').forEach(b=>b.onclick=()=>{form._replyImages.splice(Number(b.dataset.removeReplyPhoto),1);preview();});bindImagePreviews();};
  const add=async files=>{if(form._readingPhotos)return;form._readingPhotos=true;try{if(form._replyImages.length+files.length>8)throw new Error('Use up to 8 photos per update.');const images=await Promise.all(Array.from(files,replyPhoto));form._replyImages.push(...images);preview();feedback.textContent='Photos ready to save with your update.';}catch(e){feedback.textContent=e.message;}finally{form._readingPhotos=false;}};
  form.querySelectorAll('[data-reply-files],[data-reply-camera-file]').forEach(input=>input.onchange=()=>{add(input.files);input.value='';});
  form.querySelector('[data-reply-upload]').onclick=()=>form.querySelector('[data-reply-files]').click();
@@ -1288,10 +1349,11 @@ function bindReplyPhotos(){
 }
 
 function bindAuditEvents() {
+  bindTextEditors();bindImagePreviews();
   const draftStatus=qs('#auditStatus');
   const syncDraftRequirements=()=>{
     const isDraft=draftStatus?.value==='Draft';
-    document.querySelectorAll('[data-audit-action-draft] [data-action-field]').forEach(input=>{input.required=!isDraft && ['description','owner','email','dueDate'].includes(input.dataset.actionField);});
+    document.querySelectorAll('[data-audit-action-draft] [data-action-field]').forEach(input=>{input.required=!isDraft && !input._editor && ['description','owner','email','dueDate'].includes(input.dataset.actionField);});
     const button=qs('#saveAuditEntry');if(button)button.textContent=isDraft?'Save draft':'Finalize audit item';
     document.querySelectorAll('[data-action-field="status"]').forEach(input=>input.value=isDraft?'Draft':'Open');
   };
@@ -1329,10 +1391,10 @@ function bindAuditEvents() {
   });
   document.querySelectorAll(".audit-add-action-form, .audit-update-action-form").forEach(form => form.addEventListener("submit", async event => {
     event.preventDefault();
-    const button = form.querySelector("button");
+    const button = form.querySelector('button[type="submit"],button:not([type])');
     button.disabled = true;
     try {
-      await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`, {method: "POST", body: JSON.stringify({id: form.dataset.entryId, operation: form.dataset.actionId ? "update-action" : "add-action", actionId: form.dataset.actionId, action: Object.fromEntries(new FormData(form))})});
+      await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`, {method: "POST", body: JSON.stringify({id: form.dataset.entryId, operation: form.dataset.actionId ? "update-action" : "add-action", actionId: form.dataset.actionId, action: {...Object.fromEntries(new FormData(form)),descriptionStyles:editorStyles(form.querySelector('[name="description"]'))}})});
       renderAudit();
     } catch (error) { form.querySelector('[role="status"]').textContent = error.message; button.disabled = false; }
   }));
@@ -1353,7 +1415,7 @@ function bindAuditEvents() {
     const button = form.querySelector('button[type="submit"]');
     const values = Object.fromEntries(new FormData(form));
     if(form._readingPhotos){feedback.textContent='Wait for photos to finish loading.';return;}
-    values.images=form._replyImages||[];
+    values.images=form._replyImages||[];values.textStyles=editorStyles(form.querySelector('[name="text"]'));
     if (!values.text.trim()) { feedback.textContent = "Enter a respondent and response."; return; }
     const entry = state.auditEntries.find(item => item.id === form.dataset.entryId);
     if (!entry) return;
@@ -1471,11 +1533,14 @@ function bindAuditEvents() {
       dueDate: qs("#auditDueDate")?.value || "",
       reference: qs("#auditReference")?.value.trim() || "",
       finding,
+      findingStyles: editorStyles(qs("#auditFinding")),
+      impactStyles: editorStyles(qs("#auditImpact")),
       observationImages: (state.auditObservationImages || []).map((item) => ({
         dataUrl: item.dataUrl,
         url: item.url,
         name: item.name,
         description: item.description || "",
+        descriptionStyles: item.descriptionStyles || [],
       })),
       impact: qs("#auditImpact")?.value.trim() || "",
       recommendation: actions.map(action => action.description).join("\n\n") || "Corrective action pending assignment.",

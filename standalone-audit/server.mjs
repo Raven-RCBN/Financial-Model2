@@ -85,6 +85,7 @@ async function handle(req,res){
  if(!session){if(url.pathname.startsWith('/api/'))return send(req,res,401,{message:'Authentication required'});res.writeHead(303,{Location:'/login'});return res.end();}
  if(url.pathname==='/api/session')return send(req,res,200,session);
  if(['/','/app','/audit'].includes(url.pathname)&&req.method==='GET')return asset(req,res,path.join(__dirname,'index.html'));
+ if(url.pathname==='/audit/text-format.mjs' && req.method==='GET')return asset(req,res,path.join(assetRoot,'audit/text-format.mjs'));
  if(['/app.js','/styles.css'].includes(url.pathname)&&req.method==='GET')return asset(req,res,path.join(__dirname,url.pathname.slice(1)));
  if(/^\/public\/[a-zA-Z0-9_.-]+\.(png|jpe?g|webp|svg)$/.test(url.pathname))return asset(req,res,existsSync(path.join(dataDir,'branding',path.basename(url.pathname)))?path.join(dataDir,'branding',path.basename(url.pathname)):path.join(assetRoot,url.pathname));
  const projectId=context.project.id;
@@ -333,6 +334,7 @@ async function persistAuditEntryImages(projectId, entry = {}) {
           url,
           name: String(item.name || `Observation image ${index + 1}`),
           description: String(item.description || ""),
+          descriptionStyles: item.descriptionStyles || [],
         };
       }
       return item;

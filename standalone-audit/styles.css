@@ -4712,3 +4712,54 @@ h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
 .audit-assignee-preview textarea { width: 100%; box-sizing: border-box; }
 .audit-assignee-preview .audit-update-photo-actions { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: .75rem; }
 .audit-assignee-preview :disabled { cursor: not-allowed; opacity: .7; }
+
+/* Simple audit text formatting and evidence preview. */
+.audit-text-composer { border: 1px solid #c7d9c6; border-radius: 9px; overflow: hidden; background: #fff; width: 100%; box-sizing: border-box; }
+.audit-text-toolbar { display: flex; gap: .25rem; padding: .3rem .4rem; background: #f5f8f2; border-bottom: 1px solid #dbe6d7; }
+.audit-text-toolbar button { width: 1.75rem; height: 1.75rem; min-height: 0; padding: 0; border: 1px solid #c7d9c6; border-radius: 4px; background: white; color: #205a32; font-size: .875rem; cursor: pointer; }
+.audit-text-toolbar button[aria-pressed="true"] { background: #155d29; color: white; }
+.audit-text-editor { min-height: 6rem; max-height: 12rem; overflow-y: auto; scrollbar-gutter: stable; padding: .85rem; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 400; line-height: 1.6; }
+.audit-text-editor:focus { box-shadow: inset 0 0 0 2px #438757; }
+.audit-text-editor:empty::before { content: attr(data-placeholder); color: #82917e; pointer-events: none; }
+.audit-text-editor b,.audit-text-editor strong,.multiline-text b,.audit-observation-report-images b { font-weight: 700; }
+[data-enlarge-bound] { cursor: zoom-in; }
+[data-enlarge-bound]:focus-visible { outline: 3px solid #28764b; outline-offset: 3px; }
+.audit-image-dialog { width: min(94vw,1400px); max-width: 94vw; max-height: 94vh; padding: 0; border: 1px solid #c7d9c6; border-radius: 12px; color: #214d34; background: #f6f8f3; }
+.audit-image-dialog::backdrop { background: rgba(8,22,14,.78); }
+.audit-image-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; background: white; }
+.audit-image-dialog header span { overflow-wrap: anywhere; }
+.audit-image-viewport { overflow: auto; max-height: 80vh; padding: 1rem; text-align: center; }
+.audit-image-viewport img { display: block; width: auto; max-width: 100%; max-height: 75vh; margin: auto; object-fit: contain; cursor: zoom-in; }
+.audit-image-viewport img.actual-size { max-width: none; max-height: none; cursor: zoom-out; }
+
+.audit-text-toolbar b { font-weight: 700; }
+
+/* Compact screen thumbnails; full-size evidence remains available in the dialog. */
+@media screen {
+  .audit-report-text { display: block; max-height: 12rem; overflow-y: auto; scrollbar-gutter: stable; overflow-wrap: anywhere; }
+  .audit-report-text:focus-visible { outline: 2px solid #438757; outline-offset: 2px; }
+  .audit-observation-images,
+  .audit-observation-report-images {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 210px));
+    gap: 8px;
+  }
+  .audit-observation-image-card,
+  .audit-observation-images > figure,
+  .audit-observation-report-images > figure { min-width: 0; margin: 0; padding: 6px; }
+  .audit-observation-image-card img,
+  .audit-observation-images > figure img,
+  .audit-observation-report-images img {
+    display: block; width: 100%; height: 96px; max-height: 96px;
+    object-fit: contain; border-radius: 6px; background: #f5f8f2;
+  }
+  .audit-observation-image-card .audit-text-editor {
+    min-height: 3rem; max-height: 6rem; padding: .5rem; font-size: .8rem;
+  }
+  .audit-observation-report-images figcaption,
+  .audit-observation-images > figure figcaption {
+    max-height: 4.5rem; overflow-y: auto; overflow-wrap: anywhere;
+  }
+  .audit-photo-preview,
+  .audit-empty-photo { width: min(100%, 210px); height: 118px; aspect-ratio: auto; object-fit: contain; }
+  .audit-evidence-row img { width: 96px; height: 66px; object-fit: contain; }
+}

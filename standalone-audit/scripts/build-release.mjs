@@ -7,7 +7,7 @@ await fs.mkdir(out,{recursive:false});
 for(const name of ['company-config.mjs','timezone.mjs','notifications.mjs','send_mail.py','server.mjs','login-page.mjs','report-data.mjs','query-store.mjs','query_index.py','render_source_report.py','app.js','styles.css','index.html'])await fs.copyFile(path.join(repo,'standalone-audit',name),path.join(out,name));
 let server=await fs.readFile(path.join(out,'server.mjs'),'utf8');server=server.replaceAll("'../audit/","'./audit/");await fs.writeFile(path.join(out,'server.mjs'),server);
 const notifications=path.join(out,'notifications.mjs');await fs.writeFile(notifications,(await fs.readFile(notifications,'utf8')).replaceAll("'../audit/","'./audit/"));
-for(const name of ['audit-permissions.mjs','audit-store.mjs','mobile-sync.mjs','render_audit_pdf.py']){await fs.mkdir(path.join(out,'audit'),{recursive:true});await fs.copyFile(path.join(repo,'audit',name),path.join(out,'audit',name));}
+for(const name of ['text-format.mjs','audit-permissions.mjs','audit-store.mjs','mobile-sync.mjs','render_audit_pdf.py']){await fs.mkdir(path.join(out,'audit'),{recursive:true});await fs.copyFile(path.join(repo,'audit',name),path.join(out,'audit',name));}
 // Standalone store must never inherit FM2's Mongo configuration.
 const storeFile=path.join(out,'audit/audit-store.mjs');let store=await fs.readFile(storeFile,'utf8');store=store.replace('process.env.FM2_MONGODB_URI || process.env.MONGODB_URI','process.env.AUDIT_MONGODB_URI');store=store.replace('  } catch {\n    return [];\n  }','  } catch (error) {\n    if (error.code !== "ENOENT") throw error;\n    return [];\n  }');
 store=store.replace('  } catch {\n    existing = [];\n  }','  } catch (error) {\n    if (error.code !== "ENOENT") throw error;\n    existing = [];\n  }');

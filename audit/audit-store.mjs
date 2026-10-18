@@ -1,3 +1,4 @@
+import {normalizeTextStyles} from './text-format.mjs';
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -434,6 +435,7 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
         url: typeof item.url === "string" && item.url.startsWith("/") ? item.url : "",
         name: String(item.name || ""),
         description: String(item.description || ""),
+        descriptionStyles: normalizeTextStyles(item.description,item.descriptionStyles),
       }))
       .filter((item) => item.dataUrl || item.url)
     : [];
@@ -459,9 +461,11 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
     dueDate: String(entry.dueDate || ""),
     reference: String(entry.reference || ""),
     finding: String(entry.finding || ""),
+    findingStyles: normalizeTextStyles(entry.finding,entry.findingStyles),
     actions: Array.isArray(entry.actions) ? entry.actions.filter(action => action && typeof action === "object").map(action => ({
       id: String(action.id || randomUUID()),
       description: String(action.description || ""),
+      descriptionStyles: normalizeTextStyles(action.description,action.descriptionStyles),
       notificationRevision: String(action.notificationRevision || ''),
       assignedAt: String(action.assignedAt || ''),
       owner: String(action.owner || ""),
@@ -470,6 +474,7 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
       status: ["Open", "In progress", "Closed"].includes(action.status) ? action.status : "Open",
       responseDueDate: String(action.responseDueDate || ""),
       responses: Array.isArray(action.responses) ? action.responses.filter(reply => reply && typeof reply === "object").map(reply => ({
+        textStyles: normalizeTextStyles(reply.text,reply.textStyles),
         id: String(reply.id || randomUUID()), text: String(reply.text || ""), author: String(reply.author || ""), email: String(reply.email || ""), dueDate: String(reply.dueDate || ""), createdAt: String(reply.createdAt || now),
         status: ["Open","In progress","Closed"].includes(reply.status)?reply.status:"",
         images: Array.isArray(reply.images)?reply.images.map(image=>({url:typeof image.url==='string'&&image.url.startsWith('/audit/uploads/')?image.url:'',dataUrl:typeof image.dataUrl==='string'&&image.dataUrl.startsWith('data:image/')?image.dataUrl:'',name:String(image.name||''),description:String(image.description||'')})).filter(image=>image.url||image.dataUrl).slice(0,8):[],
@@ -477,6 +482,7 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
     })) : [],
     observationImages,
     impact: String(entry.impact || (entry.sourceReport || entry.status === "Draft" ? "" : "Impact pending review.")),
+    impactStyles: normalizeTextStyles(entry.impact,entry.impactStyles),
     recommendation: String(entry.recommendation || (entry.sourceReport || entry.status === "Draft" ? "" : "Corrective action pending assignment.")),
     geo: geo && Number.isFinite(geo.latitude) && Number.isFinite(geo.longitude) ? geo : null,
     photoDataUrl: typeof entry.photoDataUrl === "string" && entry.photoDataUrl.startsWith("data:image/") ? entry.photoDataUrl : "",

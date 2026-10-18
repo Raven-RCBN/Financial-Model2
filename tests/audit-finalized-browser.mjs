@@ -7,7 +7,7 @@ try {
  const creator=await browser.newContext();await creator.request.post(base+'/login',{form:{userid:'mobile.milo',password:'MobileTest-Only-2026'}});
  const page=await creator.newPage();await page.goto(base+'/app');await page.locator('[data-audit-panel=entry]').click();
  const preview=page.getByRole('group',{name:'Corrective action — assigned user only'}).first();await preview.waitFor();
- assert(await preview.getByRole('textbox').isDisabled());assert(await preview.getByRole('button',{name:'Upload photos'}).isDisabled());assert(await page.locator('[data-action-field=description]').first().isEditable());
+ assert(await preview.getByRole('textbox').isDisabled());assert(await preview.getByRole('button',{name:'Upload photos'}).isDisabled());assert(await page.locator('[data-editor-for=description]').first().isEditable());
  const draftResponse=await creator.request.post(api+'audit-entries',{data:{id:crypto.randomUUID(),status:'Draft',entity:'Training Plantation',auditYear:String(new Date().getFullYear()),department:'Plantation',area:'SOP compliance',finding:'Recommendation workflow check',actions:[{description:'Improve drainage',owner:'mobile.owner',email:'owner@example.test',dueDate:'2099-01-01'}]}});assert.equal(draftResponse.status(),201);const draft=(await draftResponse.json()).entry;
  const owner=await browser.newContext();await owner.request.post(base+'/login',{form:{userid:'mobile.owner',password:'MobileTest-Only-2026'}});
  const reply={id:draft.id,operation:'reply',actionId:draft.actions[0].id,text:'Drain cleared',status:'Closed'};
@@ -17,8 +17,8 @@ try {
  await page.locator('[data-audit-panel=report]').click();await page.reload();await page.locator('[data-audit-panel=report]').click();await page.getByText('Recommendation workflow check',{exact:true}).first().waitFor();
  assert.equal(await page.locator('.audit-update-action-form,.audit-add-action-form,.audit-action-reply-form').count(),0);
  const op=await owner.newPage();await op.goto(base+'/app');await op.locator('[data-audit-panel=report]').click();
- const form=op.locator('.audit-action-reply-form');await form.waitFor();assert.equal(await op.locator('.audit-update-action-form,.audit-add-action-form').count(),0);
- await form.getByLabel('Corrective action taken',{exact:true}).fill('Drain cleared and inspected');
+ const form=op.locator(`.audit-action-reply-form[data-entry-id="${draft.id}"]`);await form.waitFor();assert.equal(await op.locator('.audit-update-action-form,.audit-add-action-form').count(),0);
+ await form.locator('[data-editor-for=text]').fill('Drain cleared and inspected');
  await form.locator('[name=status]').selectOption('Closed');
  await form.locator('[data-reply-files]').setInputFiles({name:'proof.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});await form.locator('[data-reply-previews] img').waitFor();
  await form.getByRole('button',{name:'Save update'}).click();await op.locator('.audit-action-reply').filter({hasText:'Drain cleared and inspected'}).waitFor();

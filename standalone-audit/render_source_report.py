@@ -11,8 +11,24 @@ from reportlab.lib.styles import getSampleStyleSheet,ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,PageBreak,Image
 
 
-def paragraph(value,style):
-    return Paragraph(html.escape(str(value or 'Not recorded')).replace('\n','<br/>'),style)
+def styled_text(value,styles=None):
+    text=str(value or 'Not recorded')
+    runs=[]
+    for item in (styles if isinstance(styles,list) else [])[:5000]:
+        if not isinstance(item,dict):continue
+        start,end=item.get('start'),item.get('end')
+        if type(start)!=int or type(end)!=int or not 0<=start<end or start>=len(text):continue
+        runs.append(dict(item,start=start,end=min(end,len(text))))
+    points=sorted({0,len(text),*(r['start'] for r in runs),*(r['end'] for r in runs)})
+    parts=[]
+    for start,end in zip(points,points[1:]):
+        active=[r for r in runs if r['start']<=start and r['end']>=end]
+        tags=[tag for key,tag in [('bold','b'),('italic','i'),('underline','u')] if any(r.get(key) is True for r in active)]
+        parts.append(''.join('<'+t+'>' for t in tags)+html.escape(text[start:end]).replace('\n','<br/>')+''.join('</'+t+'>' for t in reversed(tags)))
+    return ''.join(parts)
+
+def paragraph(value,style,text_styles=None):
+    return Paragraph(styled_text(value,text_styles),style)
 
 def evidence_image(item):
     value=item.get('dataUrl') or item.get('url') or ''
@@ -64,16 +80,20 @@ def build(payload):
     for e in additional+tracked:
         story.extend([Spacer(1,14),paragraph(e.get('reference') or e.get('department'),styles['Heading2'])])
         if e in additional:
-            for title,key in [('Company','entity'),('Observations / Findings','finding'),('Impact','impact'),('Recommendation','recommendation'),('Status','status')]:story.extend([paragraph(title,styles['Heading3']),paragraph(e.get(key),styles['AuditBody'])])
+            for title,key in [('Company','entity'),('Observations / Findings','finding'),('Impact','impact'),('Recommendation','recommendation'),('Status','status')]:
+                story.append(paragraph(title,styles['Heading3']))
+                if key=='recommendation' and e.get('actions'):
+                    for action in e['actions']:story.append(paragraph(action.get('description'),styles['AuditBody'],action.get('descriptionStyles')))
+                else:story.append(paragraph(e.get(key),styles['AuditBody'],e.get(key+'Styles')))
         else:story.append(paragraph('Original source issue '+str(e['sourceReport']['issue'])+'; pages '+', '.join(map(str,e['sourceReport']['pages'])),styles['AuditBody']))
         if e in additional:
             for item in e.get('observationImages') or ([{'url':e.get('photoUrl'),'dataUrl':e.get('photoDataUrl'),'name':e.get('photoName')}] if e.get('photoUrl') or e.get('photoDataUrl') else []):
                 img=evidence_image(item)
-                if img:story.extend([img,paragraph(item.get('description') or item.get('name') or 'Evidence',styles['AuditBody'])])
+                if img:story.extend([img,paragraph(item.get('description') or item.get('name') or 'Evidence',styles['AuditBody'],item.get('descriptionStyles'))])
         for n,a in enumerate(e.get('actions',[]),1):
-            story.extend([paragraph('Recommendation '+str(n),styles['Heading3']),paragraph(a.get('description'),styles['AuditBody']),paragraph('Responsible person: '+a.get('owner','')+' | Email: '+a.get('email','')+' | Due: '+a.get('dueDate','')+' | Status: '+a.get('status',''),styles['AuditBody'])])
+            story.extend([paragraph('Recommendation '+str(n),styles['Heading3']),paragraph(a.get('description'),styles['AuditBody'],a.get('descriptionStyles')),paragraph('Responsible person: '+a.get('owner','')+' | Email: '+a.get('email','')+' | Due: '+a.get('dueDate','')+' | Status: '+a.get('status',''),styles['AuditBody'])])
             for r in a.get('responses',[]):
-                story.extend([paragraph('Corrective action by '+r.get('author','')+' | '+r.get('createdAt','')+' | Status: '+r.get('status','')+' | Follow-up due: '+r.get('dueDate',''),styles['Heading3']),paragraph(r.get('text'),styles['AuditBody'])])
+                story.extend([paragraph('Corrective action by '+r.get('author','')+' | '+r.get('createdAt','')+' | Status: '+r.get('status','')+' | Follow-up due: '+r.get('dueDate',''),styles['Heading3']),paragraph(r.get('text'),styles['AuditBody'],r.get('textStyles'))])
                 for item in r.get('images',[]):
                     img=evidence_image(item)
                     if img:story.extend([img,paragraph(item.get('description') or item.get('name') or 'Action evidence',styles['AuditBody'])])

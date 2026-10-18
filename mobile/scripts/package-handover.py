@@ -11,7 +11,7 @@ for base, names in {
     'mobile': ['README.md', 'PROGRAMMER-HANDOVER.md'],
     'mobile/scripts': ['test-server.mjs', 'package-handover.py'],
     'mobile/android': ['build.gradle', 'settings.gradle', 'gradle.properties', 'gradlew', 'gradlew.bat', 'gradle/wrapper/gradle-wrapper.jar', 'gradle/wrapper/gradle-wrapper.properties', 'app/build.gradle'],
-    'audit': ['audit-permissions.mjs', 'mobile-sync.mjs', 'audit-store.mjs', 'render_audit_pdf.py'],
+    'audit': ['text-format.mjs', 'audit-permissions.mjs', 'mobile-sync.mjs', 'audit-store.mjs', 'render_audit_pdf.py'],
     'standalone-audit': ['server.mjs', 'company-config.mjs', 'timezone.mjs', 'notifications.mjs', 'send_mail.py', 'query-store.mjs', 'query_index.py', 'report-data.mjs', 'login-page.mjs', 'app.js', 'styles.css', 'index.html', 'render_source_report.py'],
     'standalone-audit/scripts': ['import-source-reports.mjs'],
     'tests': ['mobile-sync.test.mjs', 'audit-response-evidence.test.mjs', 'audit-company-config.test.mjs', 'audit-drafts-notifications.test.mjs', 'mobile-browser.mjs'],

@@ -236,3 +236,56 @@ version-label change with a source backup at
 findings, settings and user directory checksums were unchanged. Included the
 previously packaged mobile programmer guide in the checkout, with current
 finalization restrictions documented. No APK rebuild was performed in this sync.
+
+## 18 October 2026 — local-only formatting and image-preview review
+
+User explicitly requested local implementation and preview before deployment.
+Uncommitted working tree adds accessible image dialogs (click/keyboard, Escape,
+Close, focus return and actual-size toggle) for observation and response evidence.
+Data-entry findings, impact, recommendations, assignee corrective-action text and
+observation captions have only Bold/Italic/Underline toolbar buttons. Plain text
+remains unchanged in the schema; optional character-range style arrays are saved
+alongside it, normalized on persistence, escaped on display and rendered in the
+standalone PDF. Emails/search and existing mobile clients continue reading plain
+text. Text ranges count Unicode code points. Pasted content is plain text only.
+
+New dependency audit/text-format.mjs must accompany the shared store/permissions;
+the release and programmer-package allowlists include it. Frontend app.js is now
+loaded as a module, and the standalone server explicitly serves this one helper.
+No arbitrary HTML is stored/rendered. Imported source-PDF pages remain unchanged.
+
+31 unit tests passed. Synthetic browser checked all three selected-text styles,
+draft save/reload/finalization, report display, image dialog keyboard/close/focus,
+and generated PDF; PDF fonts confirm bold and italic. Screenshots and synthetic
+PDF are outside Git at ../artifacts/local-formatting-preview-20261018. Local server
+port4187 uses temporary fictional fixture data and SMTP is disabled. No production
+files, records, emails, deployment or Git push performed for this preview.
+
+Local preview refinement: B/I/U buttons are 28px square. Writing areas grow up to
+192px then scroll internally; image captions use shorter scrolling editors.
+Screen evidence uses compact thumbnail grids (96px image height), retaining the
+full-size image dialog and unchanged PDF rendering. Browser check with eight
+unsaved sample paragraphs confirmed 192px client height, 1080px scroll height and
+scrolling to the last paragraph (scrollTop 888). The existing synthetic report
+thumbnail measured 196x96px and opened its enlarged dialog; Escape closed it.
+No records were saved or changed during these layout checks.
+
+## 18 October 2026 — approved formatting deployment
+
+User approved Git and webapp publication after local review. View & Report now
+also scrolls long text on screen, preserves B/I/U and uses compact clickable
+thumbnails. Screen-only rules leave printed text unbounded; PDF generation keeps
+the complete text and evidence images.
+
+31 unit tests passed, plus synthetic browser checks for draft deletion/reopening
+and 16-photo PDF retention, finalized assignee updates, and compact editor/report
+scrolling with keyboard access and unrestricted print height. Browser regression
+selectors now identify their own records when the fixture contains other entries.
+
+Deployed nine source files only from audit-formatting-update-20261018.tar.gz,
+SHA256 59854ff62e358c55ac605ce0b90f14b081a3a936c17eecd60d58d64084d4887a.
+Backup: /home/deploy_audit/backups/before-formatting-20261018/source.tar.gz.
+Preflight matched live files to the previous Git version with standalone import
+and storage transforms. Restarted audit-web.service only. Installed hashes and
+public HTTPS health passed for audit.digitalpalm.ai and audit.agrinexus.ai.
+Records, directory, settings and uploaded-photo fingerprints remained unchanged.

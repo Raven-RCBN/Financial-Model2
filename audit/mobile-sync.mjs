@@ -39,6 +39,7 @@ export function prepareMobileWrite(actor, request, existing, options = {}) {
     if (patch.operation === 'add-action' && /^[a-f0-9-]{36}$/.test(patch.action?.id || '')) authorized.actions.at(-1).id = patch.action.id;
     if (!existing && Array.isArray(patch.actions)) authorized.actions.forEach((action,i)=>{if(/^[a-f0-9-]{36}$/.test(patch.actions[i]?.id||''))action.id=patch.actions[i].id;});
   }
+  if(patch.operation==='update-finding')for(const field of ['finding','impact'])if(authorized[field]!==existing?.[field])authorized[field+'Styles']=[];
   const addedPhotos = !existing ? (authorized.observationImages?.length||0) : patch.operation === 'update-finding' ? (patch.newImages?.length||0) : 0;
   if (addedPhotos>12) reject('A mobile capture supports up to 12 new evidence photos per upload.',400);
   authorized.mobileOperations = [...(existing?.mobileOperations||[]),{id:operationId,userId:actor.userId,digest}];

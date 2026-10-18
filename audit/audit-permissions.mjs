@@ -1,3 +1,4 @@
+import {normalizeTextStyles} from './text-format.mjs';
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 export function auditIdentity(session, users = []) {
   const user = users.find(user => user.name === session?.userId);
@@ -65,8 +66,9 @@ export function applyAuditWrite(identity, patch, existing, options = {}) {
     if (existing && patch.baseUpdatedAt !== existing.updatedAt) reject('This draft changed. Reopen it before saving.',409);
     const status = patch.status || 'Draft';
     if (!['Draft','Open'].includes(status)) reject('Select Open to finalize a draft.',400);
-    const fields = ['finding','impact','department','area','priority','location','reference','auditYear','owner','dueDate','entity','photoDataUrl','photoUrl','photoName','geo','observationImages'];
+    const fields = ['finding','findingStyles','impact','impactStyles','department','area','priority','location','reference','auditYear','owner','dueDate','entity','photoDataUrl','photoUrl','photoName','geo','observationImages'];
     const next = {...existing,...Object.fromEntries(fields.filter(k=>k in patch).map(k=>[k,patch[k]])),id:existing?.id || patch.id,status,createdBy:existing?.createdBy || identity.userId,capturedAt:existing?.capturedAt || now,updatedAt:now};
+    for(const field of ['finding','impact'])if(field in patch && patch[field]!==existing?.[field] && !(field+'Styles' in patch))next[field+'Styles']=[];
     const actions = patch.actions || existing?.actions || [];
     if (!Array.isArray(actions) || actions.some(a=>!a || typeof a!=='object')) reject('Invalid corrective actions.',400);
     if (actions.some(a=>a.description || a.owner || a.email || a.dueDate) && !identity.recommend) reject('Corrective action permission is required.');
@@ -75,7 +77,7 @@ export function applyAuditWrite(identity, patch, existing, options = {}) {
     if(new Set(ids).size!==ids.length)reject('Recommendation identifiers must be unique.',400);
     next.actions = actions.map(a=>{
       const prior=existing?.reopenedAt ? existing.actions?.find(old=>old.id===a.id) : null;
-      return {id:a.id || randomUUID(),description:String(a.description||''),owner:String(a.owner||''),email:String(a.email||''),dueDate:String(a.dueDate||''),status:'Open',responses:prior?.responses || [],responseDueDate:prior?.responseDueDate || ''};
+      return {id:a.id || randomUUID(),description:String(a.description||''),descriptionStyles:normalizeTextStyles(a.description,a.descriptionStyles),owner:String(a.owner||''),email:String(a.email||''),dueDate:String(a.dueDate||''),status:'Open',responses:prior?.responses || [],responseDueDate:prior?.responseDueDate || ''};
     });
     next.recommendation=next.actions.map(a=>a.description).join('\n\n');
     if (status === 'Open') {
@@ -98,7 +100,7 @@ export function applyAuditWrite(identity, patch, existing, options = {}) {
     if (!String(patch.text || "").trim()) reject("Response is required.", 400);
     if (patch.dueDate && !validDate(patch.dueDate)) reject("Invalid follow-up due date.", 400);
     if (!["Open", "In progress", "Closed"].includes(patch.status)) reject("Invalid action status.", 400);
-    const updated = actions.map(item => item.id !== action.id ? item : {...item, status: patch.status, responseDueDate: patch.dueDate || "", responses: [...(item.responses || []), {id: randomUUID(), text: patch.text.trim(), author: identity.userId, email: identity.email, dueDate: patch.dueDate || "", createdAt: now, status: patch.status, images: responseImages(patch.images)}]});
+    const updated = actions.map(item => item.id !== action.id ? item : {...item, status: patch.status, responseDueDate: patch.dueDate || "", responses: [...(item.responses || []), {id: randomUUID(), text: patch.text.trim(), textStyles: normalizeTextStyles(patch.text.trim(),patch.textStyles), author: identity.userId, email: identity.email, dueDate: patch.dueDate || "", createdAt: now, status: patch.status, images: responseImages(patch.images)}]});
     return {...existing, actions: updated, status: updated.every(action => action.status === "Closed") ? "Closed" : updated.some(action => action.status !== "Open") ? "In progress" : "Open", updatedAt: now};
   }
   if (patch.operation === "update-action") {
@@ -107,7 +109,7 @@ export function applyAuditWrite(identity, patch, existing, options = {}) {
     validateAction(patch.action);
     const actions = actionsFor(existing);
     if (!actions.some(action => action.id === patch.actionId)) reject("Action not found.", 404);
-    const updated = actions.map(action => action.id !== patch.actionId ? action : {...action, description: patch.action.description, owner: patch.action.owner, email: patch.action.email, dueDate: patch.action.dueDate});
+    const updated = actions.map(action => action.id !== patch.actionId ? action : {...action, description: patch.action.description, descriptionStyles: normalizeTextStyles(patch.action.description,patch.action.descriptionStyles), owner: patch.action.owner, email: patch.action.email, dueDate: patch.action.dueDate});
     return {...existing, actions: updated, recommendation: updated.map(action => action.description).join("\n\n"), updatedAt: now};
   }
   if (patch.operation === "add-action") {
