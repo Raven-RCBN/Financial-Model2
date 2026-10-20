@@ -2265,12 +2265,6 @@ function renderReportOutput(selected) {
   `;
 }
 
-function csvEscape(value) {
-  if (value == null) return "";
-  const text = String(value);
-  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
 function slug(value) {
   return String(value || "report")
     .toLowerCase()
@@ -2278,63 +2272,29 @@ function slug(value) {
     .replace(/^-|-$/g, "");
 }
 
-function reportCsv(selected) {
+function reportExcelValues(selected) {
+  const numeric = value => {
+    if (value == null || value === "") return value;
+    const number = Number(String(value).replaceAll(",", ""));
+    return Number.isFinite(number) ? number : value;
+  };
   const output = reportOutputRows(selected);
   if (output.type === "workbook-table") {
     const table = output.table;
     if (table.kind === "worksheet-grid") {
-      const display = displayWorkbookGrid(table);
-      return [
-        [state.projectData.company.name],
-        [state.projectData.project.name],
-        [table.reportTitle || selected.sheetName],
-        [`Figures in ${table.currency || reportingCurrency()}`],
-        [`Range ${table.range || ""}`],
-        [],
-        ...display.rows.map((row) => (row.cells || []).map((cell) => cell.value ?? "")),
-      ].map((row) => row.map(csvEscape).join(",")).join("\n");
+      return displayWorkbookGrid(table).rows.map(row => (row.cells || []).map(cell => numeric(cell.value)));
     }
-    const headers = ["Line item", "%", "Total", ...table.periods.map((period, index) => `${period.period} ${reportYearLabel(period, index)}`.trim())];
     const rows = table.rows.flatMap((row) => {
-      const values = [row.label, row.percent, row.total, ...(row.values || []).map((value) => reportDisplayValue(table, row, value))];
+      const values = [row.label, numeric(row.percent), numeric(row.total), ...(row.values || []).map(value => numeric(reportDisplayValue(table, row, value)))];
       return table.sheetName === "Balance Sheet" && String(row.label || "").trim().toLowerCase() === "profit/loss" ? [[], values] : [values];
     });
     return [
-      [state.projectData.company.name],
-      [state.projectData.project.name],
-      [table.reportTitle || selected.sheetName],
-      [`Figures in ${table.currency || reportingCurrency()}`],
-      [],
-      headers,
+      ["Line item", "%", "Total", ...table.periods.map(period => numeric(period.period))],
+      ["", "", "", ...table.periods.map((period, index) => Number(reportYearLabel(period, index)))],
       ...rows,
-    ].map((row) => row.map(csvEscape).join(",")).join("\n");
+    ];
   }
-  const meta = [
-    ["Company", state.projectData.company.name],
-    ["Project", state.projectData.project.name],
-    ["Report", selected.sheetName],
-    ["Reporting currency", reportingCurrency()],
-    ["Period", state.projectData.model.period],
-    [],
-  ];
-  const header = output.type === "transactions"
-    ? ["Category", "Description", "Amount", "Budget / Available", "Status"]
-    : ["Line item", "Value", "Notes"];
-  return [...meta, header, ...output.rows]
-    .map((row) => row.map(csvEscape).join(","))
-    .join("\n");
-}
-
-function downloadText(filename, text, type = "text/csv;charset=utf-8") {
-  const blob = new Blob([text], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  return [[], ...output.rows];
 }
 
 function filenameFromDisposition(header, fallback) {
@@ -2353,10 +2313,23 @@ function downloadBlob(filename, blob) {
   URL.revokeObjectURL(url);
 }
 
-function downloadSelectedReport() {
+let reportDownloadPending = false;
+async function downloadSelectedReport() {
   const selected = selectedReportSnapshot();
-  if (!selected) return;
-  downloadText(`${slug(selected.sheetName)}.csv`, reportCsv(selected));
+  if (!selected || reportDownloadPending) return;
+  const buttons = qsa("#downloadReport, #modalDownloadReport");
+  reportDownloadPending = true;
+  buttons.forEach(button => { button.disabled = true; button.setAttribute("aria-busy", "true"); });
+  try {
+    const snapshot = window.FM2ReportExcel.capture(qs("#reportDetail .report-output"), selected.sheetName, reportExcelValues(selected));
+    const blob = await window.FM2ReportExcel.create(snapshot);
+    downloadBlob(`${slug(selected.sheetName)}.xlsx`, blob);
+  } catch (error) {
+    window.alert(`Excel download failed: ${error.message || "Please try again."}`);
+  } finally {
+    reportDownloadPending = false;
+    buttons.forEach(button => { button.disabled = false; button.removeAttribute("aria-busy"); });
+  }
 }
 
 function reportPreviewHtml(selected) {
@@ -2395,7 +2368,7 @@ function ensureReportModal() {
           <h3 id="reportModalTitle">Report</h3>
         </div>
         <div class="input-actions">
-          <button class="action-icon add" id="modalDownloadReport" title="Download report" aria-label="Download report">
+          <button class="action-icon add" id="modalDownloadReport" title="Download Excel (.xlsx)" aria-label="Download Excel (.xlsx)">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
           </button>
           <button class="action-icon delete" id="closeReportModal" title="Close report" aria-label="Close report">
