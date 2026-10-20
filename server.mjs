@@ -1,4 +1,6 @@
 import http from "node:http";
+import { createAdvisorySso, overviewReportPayload } from "./advisory-sso.mjs";
+const advisorySso = createAdvisorySso();
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -72,9 +74,12 @@ function isCompressible(contentType) {
 }
 
 function send(req, res, status, body, contentType = "application/json; charset=utf-8", options = {}) {
+  if (req.advisoryAccess && contentType.startsWith("text/html")) {
+    body = bodyBuffer(body).toString("utf8").replace("<body>", '<body class="advisory-view">');
+  }
   let payload = bodyBuffer(body);
   const etag = `"${crypto.createHash("sha1").update(payload).digest("hex")}"`;
-  const cacheControl = options.cacheControl ?? (req.method === "GET" && status === 200 ? "private, max-age=30, stale-while-revalidate=120" : "no-store");
+  const cacheControl = req.advisoryAccess ? "no-store" : options.cacheControl ?? (req.method === "GET" && status === 200 ? "private, max-age=30, stale-while-revalidate=120" : "no-store");
   if (req.method === "GET" && req.headers["if-none-match"] === etag) {
     res.writeHead(304, {
       ETag: etag,
@@ -160,6 +165,7 @@ function userById(userId) {
 }
 
 function currentSession(req) {
+  if (req.advisoryAccess) return req.advisorySession || null;
   const token = parseCookies(req.headers.cookie)[authCookieName];
   if (!token) return null;
   const [payload, signature] = token.split(".");
@@ -1508,7 +1514,7 @@ async function api(req, res, url) {
   const payload = projectPayload(db, projectId, indexes);
   if (!payload) return notFound(req, res);
 
-  if (req.method === "GET" && !child) return send(req, res, 200, payload);
+  if (req.method === "GET" && !child) return send(req, res, 200, req.advisoryAccess ? overviewReportPayload(payload) : payload);
   if (req.method === "GET" && child === "summary") return send(req, res, 200, {
     company: payload.company,
     project: payload.project,
@@ -1736,7 +1742,7 @@ async function api(req, res, url) {
 }
 
 async function staticFile(req, res, url) {
-  let filePath = ["/", "/app"].includes(url.pathname) ? "/index.html" : decodeURIComponent(url.pathname);
+  let filePath = ["/", "/app", "/advisory-view"].includes(url.pathname) ? "/index.html" : decodeURIComponent(url.pathname);
   filePath = path.posix.normalize(filePath);
   if (/^\/(audit(?:[/.]|$)|mobile(?:[/-]|$)|standalone-audit(?:[/-]|$)|deployments(?:[/-]|$)|data(?:[/-]|$))/.test(filePath) || /(?:^|\/)audit[^/]*\.(?:html|json)$/.test(filePath)) return notFound(req,res);
   filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, "");
@@ -1778,6 +1784,7 @@ async function publicIconFile(req, res, url) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
+    if (await advisorySso.handle(req, res, url)) return;
     const auditApi = /^\/api\/projects\/[^/]+\/audit-[a-z]+$/.test(url.pathname);
     if (auditWritesFrozen && auditApi) return send(req,res,503,{message:'Audit migration is in progress. Pending mobile work is retained; retry after migration.'});
     if (auditApi) return send(req,res,410,{message:'Audit has moved to ' + auditExternalUrl, auditUrl:auditExternalUrl});

@@ -68,6 +68,7 @@ async function requestJson(path, options) {
 }
 
 function usesLocalFallback(path) {
+  if (window.location.pathname === "/advisory-view" || state.currentSession?.source === "advisory") return false;
   const host = window.location.hostname;
   return String(path || "").startsWith("/api/") && (host === "127.0.0.1" || host === "localhost" || window.location.protocol === "file:");
 }
@@ -441,6 +442,24 @@ function projectSettings() {
 }
 
 function applySessionUi() {
+  if (state.currentSession?.source === "advisory") {
+    document.body.classList.add("advisory-view");
+    qsa('.module:not([data-view="overview"]):not([data-view="dashboards"]), #management, #inputs').forEach(element => element.remove());
+    const controls = qs(".tenant-controls");
+    if (controls && !qs("#advisoryMainMenu")) {
+      const link = document.createElement("a");
+      link.id = "advisoryMainMenu";
+      link.className = "advisory-main-menu";
+      link.href = "/advisory-main-menu";
+      link.target = "_top";
+      link.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Main Menu</span>';
+      controls.prepend(link);
+    }
+    const description = qs("#overview .page-head p");
+    if (description) description.textContent = "View plantation performance, financial projections and reports.";
+    const title = qs(".brand-lockup span");
+    if (title) title.textContent = "Advisory · View only";
+  }
   qsa('[data-management-tab="users"], [data-management-tab="governance"], [data-management-panel="users"], [data-management-panel="governance"]').forEach(element => element.hidden = state.currentSession?.role !== "admin");
   const sessionUser = qs("#sessionUser");
   if (sessionUser) sessionUser.value = state.currentSession?.userId || "";
@@ -2656,6 +2675,7 @@ function renderLocalCpoOverviewPanel(report, refreshState = {}) {
 }
 
 async function loadLocalCpoOverviewPanel(refreshed = false) {
+  if (state.currentSession?.source === "advisory") refreshed = false;
   const target = qs("#publicCpoOverviewPanel");
   if (!target) return;
   if (refreshed && state.cpoReport) {
@@ -2741,11 +2761,13 @@ async function init() {
   renderMetrics();
   loadLocalCpoOverviewPanel();
   renderDependencies();
-  renderManagementConsole();
-  renderInputs();
+  if (session.source !== "advisory") {
+    renderManagementConsole();
+    renderInputs();
+    renderChecks();
+  }
   renderReports();
   renderFundingChart();
-  renderChecks();
   renderMarketTicker();
   bindNavigation();
 

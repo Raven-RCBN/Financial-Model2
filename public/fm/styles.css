@@ -3479,3 +3479,30 @@ h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
 /* Shared AgIntel palette. */
 
 /* Keep accessible camera/upload controls out of the scrollable layout. */
+
+/* Advisory card: Overview and Reports only; server enforces the same read-only scope. */
+body.advisory-view .module:not([data-view="overview"]):not([data-view="dashboards"]),
+body.advisory-view #management,
+body.advisory-view #inputs,
+body.advisory-view #overview .page-head .action-row,
+body.advisory-view .cpo-refresh-button,
+body.advisory-view .logout-link[href="/logout"] { display: none !important; }
+body.advisory-view { padding-bottom: 76px; }
+body.advisory-view #advisoryMainMenu {
+  position: fixed; right: 18px; bottom: 18px; z-index: 5000;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  width: 162px; min-height: 34px; padding: 0 12px; box-sizing: border-box;
+  border: 1px solid #2c7a3e; border-radius: 8px;
+  background: #0a3d14; color: #ffc94d;
+  font-family: Inter, Arial, sans-serif; font-weight: 800; font-size: 12px;
+  white-space: nowrap; text-decoration: none;
+  box-shadow: 0 4px 0 #051809, 0 12px 26px rgba(10, 61, 20, .24);
+  transition: transform .15s, background .15s;
+}
+body.advisory-view #advisoryMainMenu:hover { background: #145a25; color: #ffe19b; transform: translateY(-1px); }
+body.advisory-view #advisoryMainMenu:active { transform: translateY(3px); box-shadow: 0 1px 0 #051809, 0 5px 12px rgba(10, 61, 20, .18); }
+body.advisory-view #advisoryMainMenu:focus-visible { outline: 3px solid #ffc94d; outline-offset: 4px; }
+body.advisory-view #advisoryMainMenu svg { flex-shrink: 0; }
+@media (max-width: 720px) {
+  body.advisory-view #advisoryMainMenu { min-height: 44px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); }
+}
