@@ -44,7 +44,7 @@ export function readAdvisoryConfig(env = process.env) {
 export function advisoryRequestAllowed(method, pathname, session) {
   if (method !== "GET") return false;
   if (["/app", "/advisory-view", "/api/session", "/api/cpo-market", "/api/cpo-market/pdf",
-    "/styles.css", "/app.js", "/report-excel.js", "/public-cpo-data.json", "/public/workbook-analysis.json", "/vendor/xlsx.full.min.js"].includes(pathname)) return true;
+    "/styles.css", "/app.js", "/report-excel.js", "/public-cpo-data.json", "/public/workbook-analysis.json", "/vendor/exceljs-4.4.0.min.js"].includes(pathname)) return true;
   if (/^\/public\/[a-zA-Z0-9_.-]+\.(png|jpeg|jpg|webp|svg|ico)$/.test(pathname)) return true;
   const project = pathname.match(/^\/api\/projects\/([^/]+)(?:\/(summary|summaries|reports|report-pdf|market-ticker))?$/);
   return Boolean(project && session.projectIds?.includes(project[1]));
