@@ -1,3 +1,8 @@
+> **Current production — 23 October 2026:** Live on Malaysia `76.13.218.53`.
+> Read [audit current deployment](CURRENT-PRODUCTION.md) before deployment. Migration and activation
+> are complete. The dated first-install/cutover/India/placeholder instructions below
+> are historical; do not rerun them or deploy to India.
+
 # Standalone Audit deployment and final FM2 cutover
 
 Prepared 6 October 2026. **No live activation or data transfer has been performed by this task.**
@@ -12,7 +17,7 @@ Automatic approval review rejected an attempted live-data export to this Mac bec
 
 ## Access and preflight
 
-Use the existing protected SSH key with `deploy_audit@187.127.167.149`. The account can write its own app/releases/backups/data directories and run only:
+Use the existing protected SSH key with `deploy_audit@76.13.218.53`. The account can write its own app/releases/backups/data directories and run only:
 
 ```sh
 sudo -n /usr/local/sbin/audit-service status

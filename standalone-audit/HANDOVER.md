@@ -1,3 +1,8 @@
+> **Current production — 23 October 2026:** Live on Malaysia `76.13.218.53`.
+> Read [audit current deployment](deploy/CURRENT-PRODUCTION.md) before deployment. Migration and activation
+> are complete. The dated first-install/cutover/India/placeholder instructions below
+> are historical; do not rerun them or deploy to India.
+
 # Audit development and deployment handover
 
 Prepared 6 October 2026, Asia/Kuala_Lumpur. This is the canonical technical handover for the new Audit project chat. The originating chat is now FM2-only. User explicitly requested this separation; this handover does not authorize production activation.
