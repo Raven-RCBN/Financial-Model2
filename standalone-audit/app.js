@@ -73,7 +73,7 @@ auditBackend: "",
 auditLoading: false,
 auditSearch: "",
 auditStatusFilter: "",
-auditSearchTimer: null,
+auditSearchDraft: "",
 auditDraftImage: null,
 auditDraftImageName: "",
 auditObservationImages: [],
@@ -963,10 +963,13 @@ function renderAuditReport(entries) {
               ${auditOptions(auditYears(), String(state.auditYear), state.auditYearCounts)}
             </select>
           </label>
-          <label>
-            <span>Search findings</span>
-            <input id="auditSearch" value="${escapeHtml(state.auditSearch)}" placeholder="Department, issue, or location" />
-          </label>
+          <form id="auditSearchForm" class="audit-search-form" role="search">
+            <label for="auditSearch">Search findings</label>
+            <div class="audit-search-controls">
+              <input id="auditSearch" type="search" value="${escapeHtml(state.auditSearchDraft)}" placeholder="Department, issue, or location" />
+              <button type="submit" class="primary-button">Search</button>
+            </div>
+          </form>
           <label>
             <span>Item status</span><select id="auditStatusFilter">${["","Draft","Open","In progress","Closed"].map(v=>`<option value="${v}" ${v===state.auditStatusFilter?"selected":""}>${v||"All statuses"}</option>`).join("")}</select></label><label><span>Rows</span>
             <select id="auditPageSize">
@@ -1500,7 +1503,7 @@ function bindAuditEvents() {
     catch(error){window.alert(`Could not refresh assignees: ${error.message}. Showing the last loaded directory.`);}
     if(qs('#auditEntity')?.value!==company)return;
     if(state.selectedAuditPanel==='entry')captureAuditDraftFields();
-    updateAuditEntity(company);state.auditPage=1;state.auditSearch='';await renderAudit();
+    updateAuditEntity(company);state.auditPage=1;state.auditSearch='';state.auditSearchDraft='';await renderAudit();
   });
   bindEvent("#auditReportYear", "change", (event) => {
     state.auditYear = event.target.value || "2025";
@@ -1523,10 +1526,14 @@ function bindAuditEvents() {
     renderAudit();
   });
   bindEvent("#auditSearch", "input", (event) => {
-    state.auditSearch = event.target.value;
+    state.auditSearchDraft = event.target.value;
+  });
+
+  bindEvent("#auditSearchForm", "submit", (event) => {
+    event.preventDefault();
+    state.auditSearch = state.auditSearchDraft.trim();
     state.auditPage = 1;
-    clearTimeout(state.auditSearchTimer);
-    state.auditSearchTimer = setTimeout(() => renderAudit(), 250);
+    renderAudit();
   });
 
   bindClick("#saveAuditEntry", async () => {
@@ -1598,7 +1605,7 @@ function bindAuditEvents() {
       });
       state.auditPage = 1;
       resetAuditDraft();
-      state.selectedAuditPanel="report";state.auditStatusFilter=isDraft?"Draft":"";state.auditSearch="";
+      state.selectedAuditPanel="report";state.auditStatusFilter=isDraft?"Draft":"";state.auditSearch="";state.auditSearchDraft="";
       if (status) status.textContent = isDraft ? "Draft saved." : "Audit finalized.";
       renderAudit();
     } catch (error) {

@@ -420,3 +420,11 @@ baseline/hash checks and Audit-only restart. Both public health endpoints passed
 Source backup: /home/deploy_audit/backups/before-owner-email-20261023.
 No live entries, user directory, settings or delivery ledger were edited; no manual
 emails were sent. Only future normal workflow alerts use the selected owner email.
+
+Report search now applies only on Search button click or Enter. Typed text is
+kept separately from the applied query, so typing no longer refreshes results or
+changes pagination/download filters. Empty submitted search restores all results;
+company changes clear both values. Synthetic browser verified unchanged results
+while typing, button submission and Enter/clear behavior. Syntax/diff checks passed.
+Deployed app.js/styles.css with baseline checks and backup at
+/home/deploy_audit/backups/before-search-button-20261023; public health passed.
