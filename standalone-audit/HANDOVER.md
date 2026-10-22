@@ -391,3 +391,32 @@ assignment controls, keeping inputs/selects at 44px and the same top position.
 Stacked mobile labels retain natural height. Verified in the synthetic creator UI
 with the email label wrapping. CSS-only deployment backed up under
 /home/deploy_audit/backups/before-recommendation-alignment-20261019.
+
+## 23 October 2026 — responsible owner email alerts
+
+The entry form keeps Responsible owner as a manually typed name. A separate
+company-directory Owner email selector replaces Target closure date in the same
+compact three-column row. Email selection never overwrites the typed name.
+Legacy stored closure dates remain preserved when drafts are edited; recommendation
+due dates continue to control notifications. Existing records are not backfilled.
+
+Optional ownerEmail persists through drafts/finalization and appears in View &
+Report and alert content. Finalization validates the selected email against active
+company/all-company directory users, independently of the typed owner name. It
+adds no login or response permissions. Company changes clear an ineligible email.
+
+The owner receives each recommendation's finalization, REMINDER (two days before)
+and DUE TODAY alerts, including different assignees and deadlines within one item.
+Reopened/refinalized lifecycle notices also include the owner. Reminder/due alerts
+retain assignee and creator recipients; identical addresses are deduplicated per
+recommendation. Delivery rechecks owner activity/company access. Existing ledger
+keys, SMTP configuration and footer remain unchanged.
+
+19 focused tests passed, including multiple recommendations with different due
+dates and recipients, directory scope, incomplete drafts and recipient deduplication.
+Synthetic browser verified independent name/email persistence on save/reopen.
+Deployed five source files with original standalone import/store transforms,
+baseline/hash checks and Audit-only restart. Both public health endpoints passed.
+Source backup: /home/deploy_audit/backups/before-owner-email-20261023.
+No live entries, user directory, settings or delivery ledger were edited; no manual
+emails were sent. Only future normal workflow alerts use the selected owner email.

@@ -609,6 +609,7 @@ function updateAuditEntity(value){
  if(!setup.departments.includes(state.auditDraftFields.department))state.auditDraftFields.department='';
  if(!setup.areas.includes(state.auditDraftFields.area))state.auditDraftFields.area='';
  const users=companyAssignees();
+ if(state.auditDraftFields.ownerEmail && !companyOwners().some(u=>u.email.toLowerCase()===state.auditDraftFields.ownerEmail.toLowerCase()))state.auditDraftFields.ownerEmail="";
  for(const action of state.auditDraftFields.actions || [])if(!users.some(u=>u.name===action.owner&&u.email===action.email)){action.owner='';action.email='';}
 }
 function renderAuditEntityCard(){return `<article class="panel audit-context-panel"><label class="field"><span>Company / estate</span><select id="auditEntity">${auditCompanyNames().map(name=>`<option value="${escapeHtml(name)}" ${name===auditEntityValue()?'selected':''}>${escapeHtml(name)}</option>`).join('')}</select></label><p>Data entry and reports use this company. Administrators can add companies in Audit management.</p></article>`;}
@@ -643,6 +644,9 @@ function readAuditActionDrafts() {
   });
 }
 
+function companyOwners(company = auditEntityValue()) {
+  return (state.auditAssignees || []).filter(user=>user.companyScope!=="selected" || user.companies?.includes(company));
+}
 function companyAssignees(company = auditEntityValue()) {
   return (state.auditAssignees || []).filter(user=>user.canRespond && (user.companyScope!=='selected' || user.companies?.includes(company)));
 }
@@ -732,7 +736,8 @@ function captureAuditDraftFields() {
     status: valueFrom("#auditStatus", state.auditDraftFields.status || ""),
     location: valueFrom("#auditLocation", state.auditDraftFields.location || ""),
     owner: valueFrom("#auditOwner", state.auditDraftFields.owner || ""),
-    dueDate: valueFrom("#auditDueDate", state.auditDraftFields.dueDate || ""),
+    ownerEmail: valueFrom("#auditOwnerEmail", state.auditDraftFields.ownerEmail || ""),
+    dueDate: state.auditDraftFields.dueDate || "",
     reference: valueFrom("#auditReference", state.auditDraftFields.reference || ""),
     finding: valueFrom("#auditFinding", state.auditDraftFields.finding || ""),
     findingStyles: editorStyles(qs("#auditFinding")),
@@ -812,13 +817,14 @@ function renderAuditEntry(entries) {
             <input id="auditOwner" value="${escapeHtml(draft.owner || "")}" placeholder="Department HOD or action owner" />
           </label>
           <label class="field">
-            <span>Target closure date</span>
-            <input id="auditDueDate" type="date" value="${escapeHtml(draft.dueDate || "")}" />
+            <span>Owner email</span>
+            <select id="auditOwnerEmail" aria-describedby="auditOwnerEmailHint"><option value="">Select owner email</option>${draft.ownerEmail && !companyOwners().some(u=>u.email.toLowerCase()===draft.ownerEmail.toLowerCase())?`<option value="${escapeHtml(draft.ownerEmail)}" selected>${escapeHtml(draft.ownerEmail)} (previous selection)</option>`:''}${companyOwners().map(user=>`<option value="${escapeHtml(user.email)}" ${user.email.toLowerCase()===(draft.ownerEmail || '').toLowerCase()?'selected':''}>${escapeHtml(user.email)} — ${escapeHtml(user.name)}</option>`).join('')}</select>
           </label>
           <label class="field">
             <span>Reference / asset tag</span>
             <input id="auditReference" value="${escapeHtml(draft.reference || "")}" placeholder="Optional asset, invoice, block, or SOP reference" />
           </label>
+          <p id="auditOwnerEmailHint" class="audit-owner-hint">Select an email from the company user list. This owner receives alerts for every recommendation.</p>
           <label class="field wide audit-observation-field">
             <span>Observations / Findings</span>
             <div class="audit-observation-composer">
@@ -1033,7 +1039,7 @@ function renderAuditReport(entries) {
                     <div><b>Recommendation</b><span class="multiline-text audit-report-text" tabindex="0">${entry.sourceReport ? escapeHtml(entry.sourceReport.originalRecommendation||'Not recorded.') : entry.actions?.length ? entry.actions.map(a=>renderStyledText(a.description,a.descriptionStyles)).join('<br><br>') : escapeHtml(entry.recommendation||'Not recorded.')}</span></div>
                     <div class="audit-response-row">
                       <span><b>Entity / Company</b>${escapeHtml(entry.entity || entry.companyName || reportEntity || "-")}</span>
-                      <span><b>Owner</b>${escapeHtml(entry.owner || "-")}</span>
+                      <span><b>Owner</b>${escapeHtml(entry.owner || "-")}${entry.ownerEmail?`<br>${escapeHtml(entry.ownerEmail)}`:""}</span>
                       <span><b>Timeline</b>${auditDateLabel(entry.dueDate)}</span>
                       <span><b>Status</b><em class="risk ${auditStatusClass(entry.status)}">${escapeHtml(entry.status || "Open")}</em></span>
                     </div>
@@ -1532,6 +1538,7 @@ function bindAuditEvents() {
       if (status) status.textContent = "Observation / Finding is required before saving.";
       return;
     }
+    if (!isDraft && !qs("#auditOwnerEmail").reportValidity()) return;
     const actionInputs = Array.from(document.querySelectorAll("[data-audit-action-draft] input, [data-audit-action-draft] textarea, [data-audit-action-draft] select"));
     if (!isDraft && actionInputs.some(input => !input.reportValidity())) return;
     const actions = readAuditActionDrafts();
@@ -1551,7 +1558,8 @@ function bindAuditEvents() {
       status: isDraft ? "Draft" : "Open",
       location: qs("#auditLocation")?.value.trim() || "",
       owner: qs("#auditOwner")?.value.trim() || "",
-      dueDate: qs("#auditDueDate")?.value || "",
+      ownerEmail: qs("#auditOwnerEmail")?.value.trim() || "",
+      dueDate: state.auditDraftFields.dueDate || "",
       reference: qs("#auditReference")?.value.trim() || "",
       finding,
       findingStyles: editorStyles(qs("#auditFinding")),

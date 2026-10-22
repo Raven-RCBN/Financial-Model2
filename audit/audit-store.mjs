@@ -458,6 +458,7 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
     status: String(entry.status || "Open"),
     location: String(entry.location || ""),
     owner: String(entry.owner || ""),
+    ownerEmail: String(entry.ownerEmail || "").trim().toLowerCase(),
     dueDate: String(entry.dueDate || ""),
     reference: String(entry.reference || ""),
     finding: String(entry.finding || ""),

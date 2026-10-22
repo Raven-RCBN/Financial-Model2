@@ -12,7 +12,7 @@ const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<
 const mailLabels={assigned:'New audit item finalized and assigned',reminder:'Audit recommendation due in 2 days',due:'Audit recommendation due today',reopened:'Audit item reopened as draft',refinalized:'Updated audit item finalized'};
 export function notificationContent(entry,actions,type,timeZone) {
   const label=mailLabels[type],company=entry.entity || 'Not recorded';
-  const details=[['Company',company],['Report year',entry.auditYear || 'Not recorded'],['Audit item',entry.id],['Department',entry.department || 'Not recorded'],['Audit area',entry.area || 'Not recorded'],['Location',entry.location || 'Not recorded'],['Priority',entry.priority || 'Not recorded'],['Item status',entry.status],['Created by',entry.createdBy || 'Not recorded']];
+  const details=[['Company',company],['Report year',entry.auditYear || 'Not recorded'],['Audit item',entry.id],['Department',entry.department || 'Not recorded'],['Audit area',entry.area || 'Not recorded'],['Location',entry.location || 'Not recorded'],['Priority',entry.priority || 'Not recorded'],['Item status',entry.status],['Created by',entry.createdBy || 'Not recorded'],['Responsible owner',entry.owner || 'Not recorded'],['Responsible owner email',entry.ownerEmail || 'Not recorded']];
   const finding=entry.finding || 'Not recorded',impact=entry.impact || 'Not recorded';
   const instruction=type==='reopened'?'The creator can revise the draft. Assigned-user corrective-action updates are paused until it is finalized again.':'Review this company and report year in View & Report. Record the corrective action taken and upload supporting evidence. Responsible-person updates lock after the due date in the timezone shown; an administrator can extend the deadline.';
   const link='https://audit.agrinexus.ai/app';
@@ -54,9 +54,11 @@ export function notificationJobs(entries, directories, adminEmail, now = new Dat
     const users=directories[entry.projectId] || [];
     const creator=users.find(u=>u.name === entry.createdBy && u.status === 'Active');
     const creatorEmail=creator?.email || (entry.createdBy === 'admin' ? adminEmail : '') || entry.creatorEmail;
+    const owner=users.find(u=>u.status==='Active' && String(u.email).toLowerCase()===String(entry.ownerEmail || '').toLowerCase() && auditUserInCompany(u,entry.entity));
+    const ownerEmail=owner?.email || '';
     const notice=entry.lifecycleNotice;
     if(notice?.revision && ['reopened','refinalized'].includes(notice.type)){
-      const recipients=[creatorEmail,...(notice.assignees || []).filter(a=>users.some(u=>u.name===a.name && u.status==='Active' && String(u.email).toLowerCase()===String(a.email).toLowerCase() && auditUserInCompany(u,entry.entity))).map(a=>a.email)];
+      const recipients=[ownerEmail,creatorEmail,...(notice.assignees || []).filter(a=>users.some(u=>u.name===a.name && u.status==='Active' && String(u.email).toLowerCase()===String(a.email).toLowerCase() && auditUserInCompany(u,entry.entity))).map(a=>a.email)];
       for(const to of new Set(recipients.filter(email).map(v=>v.toLowerCase()))){
         const key=createHash('sha256').update(JSON.stringify([entry.projectId,entry.id,notice.revision,notice.type,to])).digest('hex');
         jobs.push({key,to,type:notice.type,entryId:entry.id,...notificationContent(entry,entry.actions || [],notice.type,timeZone)});
@@ -76,7 +78,7 @@ export function notificationJobs(entries, directories, adminEmail, now = new Dat
       for(const type of types){
         // Do not send stale assignment emails after the deadline.
         if(type==='assigned' && (days<0 || action.status==='Closed' || entry.status==='Closed'))continue;
-        const recipients=[...new Set((type==='assigned' ? [action.email] : [action.email,creatorEmail]).filter(email).map(v=>v.toLowerCase()))];
+        const recipients=[...new Set((type==='assigned' ? [action.email,ownerEmail] : [action.email,creatorEmail,ownerEmail]).filter(email).map(v=>v.toLowerCase()))];
         for(const to of recipients){
           const key=createHash('sha256').update(JSON.stringify([entry.projectId,entry.id,action.id,action.notificationRevision,type,to])).digest('hex');
           jobs.push({key,to,entryId:entry.id,actionId:action.id,type,...notificationContent(entry,[action],type,timeZone)});
