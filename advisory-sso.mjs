@@ -134,6 +134,8 @@ export function createAdvisorySso({ config = readAdvisoryConfig(), fetchImpl = f
         return fail(res, 401, "Your Advisory session ended or access changed. Return to Main Menu and sign in again.");
       }
       req.advisorySession = { ...session, mainMenuUrl: config.mainMenu, permissions: { add: false, edit: false, delete: false }, views: ["overview", "dashboards"] };
+      // A valid Advisory viewer opening the site root should land in its permitted workspace.
+      if (req.method === "GET" && ["/", "/app/"].includes(url.pathname)) return redirect(res, "/advisory-view");
       if (!advisoryRequestAllowed(req.method, url.pathname, session)) return fail(res, 403, "Access from Advisory is limited to viewing Overview and Reports.");
       return false;
     },

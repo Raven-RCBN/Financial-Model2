@@ -1,9 +1,14 @@
+> **Current production — 23 October 2026:** Live on Malaysia `76.13.218.53`.
+> Read [fm2 current deployment](CURRENT-PRODUCTION.md) before deployment. Migration and activation
+> are complete. The dated first-install/cutover/India/placeholder instructions below
+> are historical; do not rerun them or deploy to India.
+
 # FM2 deployment — FM2 chat only
 
 Audit has moved to its own project/chat for development and deployment. This directory owns only FM2 deployment instructions and its one-time Audit exit controls.
 
 - Domain: https://fm2.digitalpalm.ai/app
-- SSH account: `deploy_fm2@187.127.167.149`; existing protected Mac SSH key (see private local FM2-Deployment-Access.md).
+- SSH account: `deploy_fm2@76.13.218.53`; existing protected Mac SSH key (see private local FM2-Deployment-Access.md).
 - Application: `/opt/fm2/app`, entry point `server.mjs`.
 - Persistent data: `/var/lib/fm2`; preserve uploads, branding and CPO cache within the app tree.
 - Staging/backups: `/home/deploy_fm2/releases`, `/home/deploy_fm2/backups`.
