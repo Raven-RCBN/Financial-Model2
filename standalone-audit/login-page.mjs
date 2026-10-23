@@ -1,4 +1,8 @@
-export function loginPage(error = '') {
+export function safeAuditReturn(value) {
+  try { const u=new URL(value,'https://audit.agrinexus.ai'); return u.origin==='https://audit.agrinexus.ai' && u.pathname==='/app' ? u.pathname+u.search : '/app'; } catch { return '/app'; }
+}
+export function loginPage(error = '', next = '/app') {
+  const target=safeAuditReturn(next).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -34,7 +38,7 @@ export function loginPage(error = '') {
     <section class="signin" aria-labelledby="signin-title"><div class="card">
       <p class="label">Your audit workspace</p><h2 id="signin-title">Welcome back</h2><p class="description">Sign in with your Audit account to continue.</p>
       ${error ? '<p class="error" role="alert">Unable to sign in. Check your username and password, or contact your Audit administrator.</p>' : ''}
-      <form method="post" action="/login">
+      <form method="post" action="/login"><input type="hidden" name="next" value="${target}">
         <label for="userid">Username<input id="userid" name="userid" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
         <label for="password">Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
         <button type="submit">Sign in</button>

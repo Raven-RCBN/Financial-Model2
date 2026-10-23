@@ -444,3 +444,23 @@ syntax and preservation of parallel startup. Built with the standard release
 tool and deployed only app.js to Malaysia 76.13.218.53 after baseline/hash checks.
 Backup: /home/deploy_audit/backups/before-current-year-20261024/app.js.
 Public health passed. No restart, initialization or record changes.
+
+## 24 October 2026 — email review links
+
+New alert links carry company/year/item and, for individual recommendation alerts,
+action ID. Login preserves the internal /app destination, including failed login
+retry, and rejects external redirect destinations. The app opens View & Report
+filtered to that exact item and scrolls/focuses its recommendation. Show all
+findings returns to normal browsing. Company/year changes and submitted search
+exit the item filter. Existing company access and assigned-response permissions
+remain enforced; the link itself grants no access. Deleted/unavailable items
+show an empty-item notice. Previously delivered generic links cannot identify
+an item and remain unchanged; no resend was performed.
+
+15 focused tests passed, including exact SQL item filtering within company scope,
+URL encoding, safe redirects, existing owner/assignee alerts and deduplication.
+Synthetic browser verified login-to-item routing, assigned-user response controls
+and denial of response controls to another user. No test emails or live record
+writes. Deployed six source files to Malaysia with baseline/hash verification,
+backup /home/deploy_audit/backups/before-review-link-20261024, Audit-only restart,
+and successful health checks on both public domains.

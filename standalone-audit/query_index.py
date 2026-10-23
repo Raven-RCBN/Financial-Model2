@@ -30,7 +30,7 @@ if not previous or previous[0]!=rev:
     db.commit()
 db.execute('BEGIN')
 q=args['query'];base=[args['projectId'],args['company']];where='project=? AND company=?';params=base.copy()
-for param,col in [('auditYear','year'),('department','department'),('status','status')]:
+for param,col in [('entryId','id'),('auditYear','year'),('department','department'),('status','status')]:
     if q.get(param):where+=' AND '+col+'=?';params.append(str(q[param]))
 if q.get('q'):where+=' AND instr(search,?)>0';params.append(str(q['q']).lower())
 def integer(key,default,maximum):

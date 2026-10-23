@@ -6,7 +6,7 @@ import {gzip} from 'node:zlib';
 import {promisify} from 'node:util';
 import {importSourceReports} from './scripts/import-source-reports.mjs';
 import {auditCompanies,selectedCompany,companyEntries,reportListing} from './report-data.mjs';
-import {loginPage} from './login-page.mjs';
+import {loginPage,safeAuditReturn} from './login-page.mjs';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -75,14 +75,14 @@ async function handle(req,res){
  const session=sessionFor(req,directories,admin);
  if(url.pathname==='/logout'){res.setHeader('Set-Cookie',`${authCookieName}=; ${cookieOptions(req,0)}`);res.writeHead(303,{Location:'/login'});return res.end();}
  if(url.pathname==='/login'){
-  if(req.method==='GET')return send(req,res,200,loginPage(),'text/html');
+  if(req.method==='GET')return send(req,res,200,loginPage('',url.searchParams.get('next')),'text/html');
   if(req.method!=='POST')return notFound(req,res);
   const form=new URLSearchParams(await bodyText(req));const user=userById(form.get('userid'),directories,admin);
-  if(!user||!verifyAuditPassword(form.get('password'),user.credential))return send(req,res,401,loginPage('invalid'),'text/html');
+  if(!user||!verifyAuditPassword(form.get('password'),user.credential))return send(req,res,401,loginPage('invalid',form.get('next')),'text/html');
   const payload=Buffer.from(JSON.stringify({userId:user.userId,authVersion:user.credential.salt,expiresAt:Date.now()+sessionTtlMs})).toString('base64url');
-  res.setHeader('Set-Cookie',`${authCookieName}=${payload}.${signature(payload)}; ${cookieOptions(req)}`);res.writeHead(303,{Location:'/app'});return res.end();
+  res.setHeader('Set-Cookie',`${authCookieName}=${payload}.${signature(payload)}; ${cookieOptions(req)}`);res.writeHead(303,{Location:safeAuditReturn(form.get('next'))});return res.end();
  }
- if(!session){if(url.pathname.startsWith('/api/'))return send(req,res,401,{message:'Authentication required'});res.writeHead(303,{Location:'/login'});return res.end();}
+ if(!session){if(url.pathname.startsWith('/api/'))return send(req,res,401,{message:'Authentication required'});res.writeHead(303,{Location:'/login?next='+encodeURIComponent(safeAuditReturn(url.pathname+url.search))});return res.end();}
  if(url.pathname==='/api/session')return send(req,res,200,session);
  if(['/','/app','/audit'].includes(url.pathname)&&req.method==='GET')return asset(req,res,path.join(__dirname,'index.html'));
  if(url.pathname==='/audit/text-format.mjs' && req.method==='GET')return asset(req,res,path.join(assetRoot,'audit/text-format.mjs'));

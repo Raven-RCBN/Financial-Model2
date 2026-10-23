@@ -10,7 +10,7 @@ export function runQueryWorker(args,python=process.env.PYTHON||'python3'){
 }
 export async function indexedReportListing(dataDir,context,params){
  const company=selectedCompany(context,params.get('company')),stat=await fs.stat(path.join(dataDir,'audit-entries.json'));
- const query=Object.fromEntries(['auditYear','department','status','q','page','pageSize'].map(k=>[k,params.get(k)||'']).filter(([,v])=>v));
+ const query=Object.fromEntries(['entryId','auditYear','department','status','q','page','pageSize'].map(k=>[k,params.get(k)||'']).filter(([,v])=>v));
  const key=JSON.stringify([dataDir,context.project.id,context.company.name,company,stat.ino,stat.size,stat.mtimeMs,query]);
  if(cache.has(key))return cache.get(key).value;
  if(pending.has(key))return pending.get(key);

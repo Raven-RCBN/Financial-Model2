@@ -74,6 +74,8 @@ auditLoading: false,
 auditSearch: "",
 auditStatusFilter: "",
 auditSearchDraft: "",
+auditLinkedItem: "",
+auditLinkedAction: "",
 auditDraftImage: null,
 auditDraftImageName: "",
 auditObservationImages: [],
@@ -476,7 +478,7 @@ function downloadBlob(filename, blob) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-function auditQueryKey(){const q=new URLSearchParams({page:String(state.auditPage),pageSize:String(state.auditPageSize),auditYear:String(state.auditYear),company:auditEntityValue()});if(state.auditStatusFilter)q.set('status',state.auditStatusFilter);if(state.auditSearch.trim())q.set('q',state.auditSearch.trim());return q.toString();}
+function auditQueryKey(){const q=new URLSearchParams({page:String(state.auditPage),pageSize:String(state.auditPageSize),auditYear:String(state.auditYear),company:auditEntityValue()});if(state.auditLinkedItem)q.set('entryId',state.auditLinkedItem);if(state.auditStatusFilter)q.set('status',state.auditStatusFilter);if(state.auditSearch.trim())q.set('q',state.auditSearch.trim());return q.toString();}
 async function loadAuditEntries() {
   if (!canAccessAudit()) return [];
   state.auditLoading = true;
@@ -486,6 +488,7 @@ async function loadAuditEntries() {
     auditYear: String(state.auditYear),
     company: auditEntityValue(),
   });
+  if (state.auditLinkedItem) params.set("entryId",state.auditLinkedItem);
   if (state.auditStatusFilter) params.set("status",state.auditStatusFilter);
   if (state.auditSearch.trim()) params.set("q", state.auditSearch.trim());
   try {
@@ -603,6 +606,7 @@ function auditEntityValue(){
   return state.auditEntity;
 }
 function updateAuditEntity(value){
+ state.auditLinkedItem="";state.auditLinkedAction="";
  state.auditEntity=auditCompanyNames().includes(value)?value:state.projectData.company.name;
  state.auditYearCounts={};
  const setup=auditSetupSettings();if(!auditYears().includes(state.auditYear))state.auditYear=String(new Date().getFullYear());
@@ -693,7 +697,7 @@ function renderAuditActionTracking(entry) {
   return `<section class="audit-action-tracking"><h4>Recommendations and corrective actions</h4><p>The finding and recommendation are finalized. Only the assigned user can record their corrective action below; administrators can make corrections.</p>${auditActionsFor(entry).map((action, index) => {
     const timing = auditActionTiming(action);
     const followup = action.responseDueDate ? auditActionTiming({dueDate: action.responseDueDate, status: action.status}) : null;
-    return `<section class="audit-action-card audit-action-${timing.tone}">
+    return `<section class="audit-action-card audit-action-${timing.tone}" data-review-action="${escapeHtml(action.id)}" tabindex="-1">
       <header><b>Recommendation ${index + 1}</b><span class="audit-action-badge">${escapeHtml(timing.label)}</span></header>
       <p class="multiline-text audit-report-text" tabindex="0">${renderStyledText(action.description,action.descriptionStyles)}</p>
       <div class="audit-response-row"><span><b>Responsible person</b>${escapeHtml(action.owner || "Unassigned")}</span><span><b>Email</b>${escapeHtml(action.email || "Not assigned")}</span><span><b>Action due date</b>${auditDateLabel(action.dueDate)} · ${escapeHtml(entry.timeZone || "Africa/Lagos")}</span><span><b>Status</b>${escapeHtml(action.status || "Open")}</span></div>
@@ -956,6 +960,7 @@ function renderAuditReport(entries) {
           </div>
         </header>
         <p id="auditDownloadStatus" role="status" aria-live="polite" style="margin: 0 1rem;"></p>
+        ${state.auditLinkedItem?`<p class="audit-linked-notice">Showing the audit item from your email. <button id="auditShowAll" class="secondary-button">Show all findings</button>${entries.length?'':' This item is no longer available in this company/year.'}</p>`:''}
         <div class="audit-report-tools">
           <label>
             <span>Report year</span>
@@ -1365,6 +1370,7 @@ function bindReplyPhotos(){
 }
 
 function bindAuditEvents() {
+  bindClick("#auditShowAll",()=>{state.auditLinkedItem="";state.auditLinkedAction="";state.auditPage=1;history.replaceState(null,"","/app");renderAudit();});
   bindTextEditors();bindImagePreviews();
   const draftStatus=qs('#auditStatus');
   const syncDraftRequirements=()=>{
@@ -1486,6 +1492,7 @@ function bindAuditEvents() {
     renderAudit();
   });
   bindEvent("#auditEntryYear", "change", (event) => {
+    state.auditLinkedItem="";state.auditLinkedAction="";
     state.auditYear = event.target.value || String(new Date().getFullYear());
     state.auditPage = 1;
     renderAudit();
@@ -1506,6 +1513,7 @@ function bindAuditEvents() {
     updateAuditEntity(company);state.auditPage=1;state.auditSearch='';state.auditSearchDraft='';await renderAudit();
   });
   bindEvent("#auditReportYear", "change", (event) => {
+    state.auditLinkedItem="";state.auditLinkedAction="";
     state.auditYear = event.target.value || String(new Date().getFullYear());
     state.auditPage = 1;
     renderAudit();
@@ -1531,6 +1539,7 @@ function bindAuditEvents() {
 
   bindEvent("#auditSearchForm", "submit", (event) => {
     event.preventDefault();
+    state.auditLinkedItem="";state.auditLinkedAction="";
     state.auditSearch = state.auditSearchDraft.trim();
     state.auditPage = 1;
     renderAudit();
@@ -1775,6 +1784,18 @@ async function init(){
  qsa('[data-audit-panel]').forEach(button=>{button.hidden=button.dataset.auditPanel==='entry'&&!auditPermission('create');button.onclick=()=>{state.selectedAuditPanel=button.dataset.auditPanel;showScreen('audit');};});
  state.selectedAuditPanel=auditPermission('create')?'entry':'report';
  updateAuditEntity(auditEntityValue());
+ const review=new URLSearchParams(location.search);
+ if(review.get('item')){
+  if(!auditCompanyNames().includes(review.get('company')))throw new Error('This audit item is not available to your company access. Contact your Audit administrator.');
+  updateAuditEntity(review.get('company'));
+  state.auditLinkedItem=review.get('item');state.auditLinkedAction=review.get('action') || '';
+  if(/^\d{4}$/.test(review.get('year') || ''))state.auditYear=review.get('year');
+  state.selectedAuditPanel='report';
+ }
  await renderAudit();
+ if(state.auditLinkedAction){
+  const card=Array.from(document.querySelectorAll('[data-review-action]')).find(el=>el.dataset.reviewAction===state.auditLinkedAction);
+  if(card){card.scrollIntoView({block:'start'});card.focus({preventScroll:true});}
+ }
 }
 init().catch(error=>{qs('#auditWorkspace').textContent=error.message;});
