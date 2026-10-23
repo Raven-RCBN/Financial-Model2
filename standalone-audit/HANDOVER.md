@@ -433,3 +433,14 @@ company changes clear both values. Synthetic browser verified unchanged results
 while typing, button submission and Enter/clear behavior. Syntax/diff checks passed.
 Deployed app.js/styles.css with baseline checks and backup at
 /home/deploy_audit/backups/before-search-button-20261023; public health passed.
+
+## 24 October 2026 — current-year default
+
+Data Entry and View & Report initialize to the browser's current calendar year
+(2026 now), rather than hardcoded 2025. The current year remains selectable even
+when company setup lists only historical years; manual year selections and saved
+draft years are preserved. Checked 2026/2027 rollover, old-year availability,
+syntax and preservation of parallel startup. Built with the standard release
+tool and deployed only app.js to Malaysia 76.13.218.53 after baseline/hash checks.
+Backup: /home/deploy_audit/backups/before-current-year-20261024/app.js.
+Public health passed. No restart, initialization or record changes.

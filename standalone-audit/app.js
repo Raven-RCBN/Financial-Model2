@@ -60,7 +60,7 @@ let auditRenderVersion = 0;
 // Audit-only frontend extracted for independent deployment.
 const state={projectData: null,
 selectedAuditPanel: "entry",
-auditYear: "2025",
+auditYear: String(new Date().getFullYear()),
 auditEntity: "",
 currentSession: null,
 auditEntries: null,
@@ -257,7 +257,7 @@ function auditSetupSettings() {
 }
 
 function auditYears() {
-  return auditSetupSettings().years;
+  return [...new Set([String(new Date().getFullYear()), ...auditSetupSettings().years, String(state.auditYear)])].sort((a,b)=>Number(b)-Number(a));
 }
 
 function auditDepartments() {
@@ -271,7 +271,7 @@ function auditAreas() {
 function selectedCompanyProfile(name = auditEntityValue()) {
   return projectSettings().auditCompanyProfiles?.[name] || {};
 }
-function auditReportSettings(year = state.auditYear || "2025") {
+function auditReportSettings(year = state.auditYear || String(new Date().getFullYear())) {
   const profile=selectedCompanyProfile();
   return {auditReportTitle:`${year} Internal Audit Report`,auditClientName:auditEntityValue(),auditLocation:'',auditPreparedBy:'Agrinexus International',auditPeriodStart:'',auditPeriodEnd:'',auditIssueDate:'',auditConfidentiality:'Private & Confidential',...profile.auditReport,...profile.auditReportsByYear?.[year],auditClientName:auditEntityValue()};
 }
@@ -402,7 +402,7 @@ function removeAuditSetupValue(type, value) {
   const status = qs("#managementConsoleStatus");
   if (status) status.textContent = "Audit setup updated. Save to publish these master data changes.";
   if (type === "years" && !auditYears().includes(String(state.auditYear))) {
-    state.auditYear = auditYears()[0] || "2025";
+    state.auditYear = String(new Date().getFullYear());
   }
   renderManagementAuditSetup();
   renderAudit();
@@ -605,7 +605,7 @@ function auditEntityValue(){
 function updateAuditEntity(value){
  state.auditEntity=auditCompanyNames().includes(value)?value:state.projectData.company.name;
  state.auditYearCounts={};
- const setup=auditSetupSettings();if(!setup.years.includes(state.auditYear))state.auditYear=setup.years[0];
+ const setup=auditSetupSettings();if(!auditYears().includes(state.auditYear))state.auditYear=String(new Date().getFullYear());
  if(!setup.departments.includes(state.auditDraftFields.department))state.auditDraftFields.department='';
  if(!setup.areas.includes(state.auditDraftFields.area))state.auditDraftFields.area='';
  const users=companyAssignees();
@@ -1486,7 +1486,7 @@ function bindAuditEvents() {
     renderAudit();
   });
   bindEvent("#auditEntryYear", "change", (event) => {
-    state.auditYear = event.target.value || "2025";
+    state.auditYear = event.target.value || String(new Date().getFullYear());
     state.auditPage = 1;
     renderAudit();
   });
@@ -1506,7 +1506,7 @@ function bindAuditEvents() {
     updateAuditEntity(company);state.auditPage=1;state.auditSearch='';state.auditSearchDraft='';await renderAudit();
   });
   bindEvent("#auditReportYear", "change", (event) => {
-    state.auditYear = event.target.value || "2025";
+    state.auditYear = event.target.value || String(new Date().getFullYear());
     state.auditPage = 1;
     renderAudit();
   });
