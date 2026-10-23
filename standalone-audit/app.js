@@ -1760,13 +1760,13 @@ function renderCompanySettings(){
  };
 }
 async function init(){
- const [session, context, access]=await Promise.all([
+ const [session, projectData, access] = await Promise.all([
   requestJson('/api/session'),
   requestJson(`/api/projects/${PROJECT_ID}/audit-context`),
   requestJson(`/api/projects/${PROJECT_ID}/audit-access`),
  ]);
  state.currentSession=session;
- state.projectData=context;
+ state.projectData=projectData;
  state.auditNotifications=access.notifications;state.auditIdentity=access.identity;state.auditUsers=access.users||[];state.auditAssignees=access.assignees||[];
  qs('#sessionUser').value=state.currentSession.userId;
  qs('#adminMenu').hidden=!auditPermission('companySetup');
