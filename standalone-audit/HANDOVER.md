@@ -473,3 +473,10 @@ email-linked draft exits its exact-item filter. Synthetic browser checked icon
 placement; 11 draft/workflow/photo tests and syntax checks passed. Deployed only
 app.js to Malaysia, backup before-draft-delete-icon-20261024, health200. No live
 records deleted and no service restart required.
+
+### 24 October 2026 — deadline-controlled status
+- Draft-only delete icon remains enforced by UI and server permissions.
+- Webapp-created finalized recommendations stay Open through their own due date and become Closed afterward in the entry timezone (Nigeria fallback). Overall finding closes when all recommendation dates have passed. Missing dates keep Open; imported PDF findings and drafts are untouched. Extending deadlines reopens the affected status.
+- Status is normalized on web/mobile saves, startup and each minute through the existing write queue, before reminder processing. Assignee status is now read-only. Deadline closure is administrative, not verification of completed corrective work.
+- 14 deadline/deletion/photo/email/owner tests passed. Deployed only app.js, server.mjs and new deadline-status.mjs to Malaysia Audit. Health OK; server-only check of 86 records found zero deadline mismatches and preserved all content apart from intended status/updatedAt fields.
+- Private server backup: /home/deploy_audit/backups/before-deadline-status-20261024. No live records copied locally.

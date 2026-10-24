@@ -1,3 +1,4 @@
+import {applyDeadlineStatus} from './deadline-status.mjs';
 import {companyProfiles,companyReportSettings,saveCompanyProfile,validateCompanyFields} from './company-config.mjs';
 import {entryTimeZone} from './timezone.mjs';
 import {workflowOptions,enrollNotifications,notificationWorker} from './notifications.mjs';
@@ -228,7 +229,7 @@ async function handle(req,res){
       if(existing?.status==='Draft')validateAuditAssignees({...prepared.entry,operation:undefined},auditUsers,[admin.name],assignmentOptions(prepared.entry));
       if(!existing || existing.status==='Draft' || request.patch.operation==='update-finding')validateCompanyFields(context,prepared.entry);
       await verifyImageReferences(prepared.entry);
-      const persisted = await persistAuditEntryImages(projectId, enrollNotifications(prepared.entry,existing,auditActor));
+      const persisted = await persistAuditEntryImages(projectId, enrollNotifications(applyDeadlineStatus(prepared.entry),existing,auditActor));
       const result = await createAuditEntry(dbPath,projectId,persisted);
       setImmediate(()=>mailWorker.run());
       return send(req,res,200,result,"application/json; charset=utf-8",{cacheControl:"no-store"});
@@ -269,7 +270,7 @@ async function handle(req,res){
         if(existing?.status==='Draft')validateAuditAssignees({...authorized,operation:undefined},auditUsers,[admin.name],assignmentOptions(authorized));
         if(!existing || existing.status==='Draft')validateCompanyFields(context,authorized);
         await verifyImageReferences(authorized);
-        const persistedPatch = await persistAuditEntryImages(projectId, enrollNotifications(authorized,existing,auditActor));
+        const persistedPatch = await persistAuditEntryImages(projectId, enrollNotifications(applyDeadlineStatus(authorized),existing,auditActor));
         const result = await createAuditEntry(dbPath, projectId, persistedPatch);
         setImmediate(()=>mailWorker.run());
         return send(req, res, 201, result, "application/json; charset=utf-8", { cacheControl: "no-store" });
@@ -354,7 +355,18 @@ const server=http.createServer((req,res)=>{
 });
 if(existsSync(path.join(dataDir,'report-import.pending.json')))throw new Error('Incomplete report import; restore its private backup before starting.');
 await Promise.all(['audit-context.json','audit-users.json','audit-entries.json','admin-user.json'].map(file=>readJson(path.join(dataDir,file))));
+await refreshDeadlineStatuses();
 server.listen(port,'127.0.0.1',()=>console.log(`Standalone Audit listening on 127.0.0.1:${port}`));
 
-setInterval(()=>mailWorker.run(),60000).unref();
+async function refreshDeadlineStatuses(){
+ const file=path.join(dataDir,'audit-entries.json');
+ const entries=await readJson(file),now=new Date();
+ const updated=entries.map(entry=>applyDeadlineStatus(entry,now));
+ if(updated.some((entry,i)=>entry!==entries[i]))await atomicJson(file,updated);
+}
+setInterval(()=>{
+ const pending=queue.then(refreshDeadlineStatuses);
+ queue=pending.catch(error=>console.error('Deadline status update failed:',error.message));
+ pending.then(()=>mailWorker.run()).catch(()=>{});
+},60000).unref();
 setImmediate(()=>mailWorker.run());
