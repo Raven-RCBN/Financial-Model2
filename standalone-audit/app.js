@@ -693,7 +693,7 @@ function canEditAuditDraft(entry) {
 }
 
 function renderAuditActionTracking(entry) {
-  if(entry.status==='Draft')return `<section class="audit-action-tracking"><p>Draft — editable until finalized. Use Edit at the top of this finding to update or delete your draft. No assignment emails are sent and this item is excluded from PDF reports.</p></section>`;
+  if(entry.status==='Draft')return `<section class="audit-action-tracking"><p>Draft — editable until finalized. Use Edit to update your draft, or the delete icon beside it to remove it. No assignment emails are sent and this item is excluded from PDF reports.</p></section>`;
   return `<section class="audit-action-tracking"><h4>Recommendations and corrective actions</h4><p>The finding and recommendation are finalized. Only the assigned user can record their corrective action below; administrators can make corrections.</p>${auditActionsFor(entry).map((action, index) => {
     const timing = auditActionTiming(action);
     const followup = action.responseDueDate ? auditActionTiming({dueDate: action.responseDueDate, status: action.status}) : null;
@@ -1038,7 +1038,7 @@ function renderAuditReport(entries) {
                       <span>Audit Issue ${entry.sourceReport?.issue || ((state.auditPage-1)*state.auditPageSize+index+1)}: ${escapeHtml(entry.department)}</span>
                       <h5>${escapeHtml(entry.sourceReport ? "Audit observation" : (entry.area || "Audit observation"))}</h5>
                     </div>
-                    <div class="input-actions">${canEditAuditDraft(entry)?`<button type="button" class="secondary-button" data-edit-audit-draft="${escapeHtml(entry.id)}">Edit</button>`:""}${state.currentSession?.role === "admin" && entry.status !== "Draft" && !entry.sourceReport ? `<button type="button" class="secondary-button" data-reopen-audit="${escapeHtml(entry.id)}">Reopen as draft</button>` : ""}<b class="risk ${auditPriorityClass(entry.priority)}">${escapeHtml(entry.priority)}</b></div>
+                    <div class="input-actions">${canEditAuditDraft(entry)?`<button type="button" class="secondary-button" data-edit-audit-draft="${escapeHtml(entry.id)}">Edit</button><button type="button" class="secondary-button" data-delete-audit-draft="${escapeHtml(entry.id)}" aria-label="Delete draft" title="Delete draft"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>`:""}${state.currentSession?.role === "admin" && entry.status !== "Draft" && !entry.sourceReport ? `<button type="button" class="secondary-button" data-reopen-audit="${escapeHtml(entry.id)}">Reopen as draft</button>` : ""}<b class="risk ${auditPriorityClass(entry.priority)}">${escapeHtml(entry.priority)}</b></div>
                   </header>
                   <div class="audit-finding-body">
                     <div><b>Observations / Findings</b><span class="multiline-text audit-report-text" tabindex="0">${renderStyledText(entry.finding || (entry.status === "Draft" ? "Untitled draft" : ""),entry.findingStyles)}</span></div>
@@ -1397,20 +1397,25 @@ function bindAuditEvents() {
     state.auditDraftImage=entry.photoDataUrl || entry.photoUrl || null;state.auditDraftImageName=entry.photoName || '';
     state.auditYear=entry.auditYear;state.auditEntity=entry.entity;state.selectedAuditPanel='entry';renderAudit();
   }));
-  bindClick("#deleteAuditDraft", async () => {
-    const entry=state.auditEditingDraft;
+  const deleteSavedDraft = async (entry, button, fromEditor = false) => {
     if(!canEditAuditDraft(entry))return;
     if(!window.confirm('Delete this saved draft? It will be removed from the audit list.'))return;
-    const button=qs('#deleteAuditDraft'),saveButton=qs('#saveAuditEntry'),status=qs('#auditSaveStatus');
+    const saveButton=fromEditor?qs('#saveAuditEntry'):null;
     button.disabled=true;if(saveButton)saveButton.disabled=true;
     try {
       await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`,{method:'DELETE',body:JSON.stringify({id:entry.id,baseUpdatedAt:entry.updatedAt})});
-      resetAuditDraft();state.auditPage=1;state.selectedAuditPanel='report';await renderAudit();
+      if(fromEditor || state.auditEditingDraft?.id===entry.id)resetAuditDraft();
+      if(state.auditLinkedItem===entry.id){state.auditLinkedItem="";state.auditLinkedAction="";history.replaceState(null,"","/app");}
+      state.selectedAuditPanel='report';await renderAudit();
     } catch(error) {
+      const status=fromEditor?qs('#auditSaveStatus'):null;
       if(status)status.textContent=error.message || 'Draft could not be deleted.';
+      else window.alert(error.message || 'Draft could not be deleted.');
       button.disabled=false;if(saveButton)saveButton.disabled=false;
     }
-  });
+  };
+  bindClick("#deleteAuditDraft",()=>deleteSavedDraft(state.auditEditingDraft,qs('#deleteAuditDraft'),true));
+  document.querySelectorAll('[data-delete-audit-draft]').forEach(button=>button.addEventListener('click',()=>deleteSavedDraft(state.auditEntries.find(e=>e.id===button.dataset.deleteAuditDraft),button)));
   document.querySelectorAll(".audit-add-action-form, .audit-update-action-form").forEach(form => form.addEventListener("submit", async event => {
     event.preventDefault();
     const button = form.querySelector('button[type="submit"],button:not([type])');

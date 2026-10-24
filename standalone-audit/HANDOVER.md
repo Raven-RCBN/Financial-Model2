@@ -464,3 +464,12 @@ and denial of response controls to another user. No test emails or live record
 writes. Deployed six source files to Malaysia with baseline/hash verification,
 backup /home/deploy_audit/backups/before-review-link-20261024, Audit-only restart,
 and successful health checks on both public domains.
+
+Draft report cards now have an accessible trash icon immediately beside Edit.
+Both deletion entry points use the same confirmation/request/error handler and
+existing server authorization/concurrency checks. Only creator/admin-editable
+drafts expose the icon; finalized/imported records remain locked. Deleting an
+email-linked draft exits its exact-item filter. Synthetic browser checked icon
+placement; 11 draft/workflow/photo tests and syntax checks passed. Deployed only
+app.js to Malaysia, backup before-draft-delete-icon-20261024, health200. No live
+records deleted and no service restart required.
