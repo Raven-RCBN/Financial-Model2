@@ -480,3 +480,7 @@ records deleted and no service restart required.
 - Status is normalized on web/mobile saves, startup and each minute through the existing write queue, before reminder processing. Assignee status is now read-only. Deadline closure is administrative, not verification of completed corrective work.
 - 14 deadline/deletion/photo/email/owner tests passed. Deployed only app.js, server.mjs and new deadline-status.mjs to Malaysia Audit. Health OK; server-only check of 86 records found zero deadline mismatches and preserved all content apart from intended status/updatedAt fields.
 - Private server backup: /home/deploy_audit/backups/before-deadline-status-20261024. No live records copied locally.
+
+### 25 October 2026 — bullet lists
+- Added compact Bullet list toggle beside Underline in Audit text editors. Native list editing supports Enter for the next item and toggling off. Stored plain text includes bullet characters, so existing report/PDF/email output retains lists without schema changes; reopening reconstructs editable lists while preserving B/I/U ranges.
+- Four text-format/bullet tests passed; synthetic browser verified creation, saved bullet text and reopening. Screenshot: local artifacts/bullet-list-20261025.png. Only app.js deployed to Malaysia; health OK. Backup: /home/deploy_audit/backups/before-bullet-list-20261025/app.js. No live record changes.

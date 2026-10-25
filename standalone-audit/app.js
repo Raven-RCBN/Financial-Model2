@@ -10,14 +10,28 @@ function readStyledEditor(editor) {
     if(node.nodeType!==1)return;
     if(node.tagName==='BR'){add('\n',marks);return;}
     const next={bold:marks.bold || ['B','STRONG'].includes(node.tagName) || ['bold','700'].includes(node.style.fontWeight),italic:marks.italic || ['I','EM'].includes(node.tagName) || node.style.fontStyle==='italic',underline:marks.underline || node.tagName==='U' || node.style.textDecoration.includes('underline')};
-    if(['DIV','P'].includes(node.tagName) && node!==editor && text && !text.endsWith('\n'))add('\n',{});
+    if(['DIV','P','LI','UL'].includes(node.tagName) && node!==editor && text && !text.endsWith('\n'))add('\n',{});
+    if(node.tagName==='LI')add('• ',{});
     node.childNodes.forEach(child=>walk(child,next));
+    if(['LI','UL'].includes(node.tagName) && !text.endsWith('\n'))add('\n',{});
   };
   editor.childNodes.forEach(n=>walk(n));
   // Values are trimmed by existing forms; shift style ranges with the text.
   const leading=Array.from(text).length-Array.from(text.trimStart()).length;
   text=text.trim();styles=styles.map(s=>({...s,start:Math.max(0,s.start-leading),end:s.end-leading}));
   return {text,styles:normalizeTextStyles(text,styles)};
+}
+function renderEditorText(text,styles) {
+  let offset=0,inList=false,html='';
+  for(const line of String(text || '').split('\n')){
+    const bullet=line.startsWith('• '),skip=bullet?2:0,length=Array.from(line).length;
+    const runs=styles.map(s=>({...s,start:Math.max(0,s.start-offset-skip),end:Math.min(length-skip,s.end-offset-skip)}));
+    const content=renderStyledText(line.slice(skip),runs);
+    if(bullet){if(!inList)html+='<ul>';html+='<li>'+content+'</li>';}
+    else {if(inList)html+='</ul>';html+=(offset && !inList?'<br>':'')+content;}
+    inList=bullet;offset+=length+1;
+  }
+  return html+(inList?'</ul>':'');
 }
 function bindTextEditors() {
   document.querySelectorAll('#auditFinding,#auditImpact,[data-action-field="description"],.audit-action-tracking textarea[name="description"],.audit-action-tracking textarea[name="text"],[data-observation-image-description]').forEach(input=>{
@@ -26,18 +40,18 @@ function bindTextEditors() {
     const wrap=document.createElement('div');wrap.className='audit-text-composer';
     const toolbar=document.createElement('div');toolbar.className='audit-text-toolbar';toolbar.setAttribute('role','group');toolbar.setAttribute('aria-label',label+' formatting');
     const editor=document.createElement('div');editor.className='audit-text-editor';editor.contentEditable='true';editor.setAttribute('role','textbox');editor.setAttribute('aria-multiline','true');editor.setAttribute('aria-label',label);editor.dataset.editorFor=input.id || input.name || input.dataset.actionField || 'caption';editor.dataset.placeholder=input.placeholder || 'Enter text';
-    editor.innerHTML=renderStyledText(input.value,editorStyles(input));input._editor=editor;
+    editor.innerHTML=renderEditorText(input.value,editorStyles(input));input._editor=editor;
     const sync=()=>{const value=readStyledEditor(editor);input.value=value.text;input.dataset.textStyles=JSON.stringify(value.styles);input.dispatchEvent(new Event('input',{bubbles:true}));};
-    for(const [command,title,tag] of [['bold','Bold','b'],['italic','Italic','i'],['underline','Underline','u']]){
-      const button=document.createElement('button');button.type='button';button.title=title;button.setAttribute('aria-label',title);button.setAttribute('aria-pressed','false');button.innerHTML=`<${tag}>${title[0]}</${tag}>`;
+    for(const [command,title,tag] of [['bold','Bold','b'],['italic','Italic','i'],['underline','Underline','u'],['insertUnorderedList','Bullet list','span']]){
+      const button=document.createElement('button');button.type='button';button.title=title;button.setAttribute('aria-label',title);button.setAttribute('aria-pressed','false');button.innerHTML=command==='insertUnorderedList'?'<svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="5" r="1.5"/><circle cx="3" cy="10" r="1.5"/><circle cx="3" cy="15" r="1.5"/></g><path d="M7 5h10M7 10h10M7 15h10" stroke="currentColor" stroke-width="1.5"/></svg>':`<${tag}>${title[0]}</${tag}>`;
       button.addEventListener('mousedown',e=>e.preventDefault());
       button.addEventListener('click',()=>{editor.focus();if(editor._range){const sel=window.getSelection();sel.removeAllRanges();sel.addRange(editor._range);}document.execCommand('styleWithCSS',false,false);document.execCommand(command);sync();remember();});toolbar.append(button);
     }
-    const remember=()=>{const sel=window.getSelection();if(sel.rangeCount && editor.contains(sel.anchorNode)){editor._range=sel.getRangeAt(0).cloneRange();toolbar.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-pressed',String(document.queryCommandState(['bold','italic','underline'][i]))));}};
+    const remember=()=>{const sel=window.getSelection();if(sel.rangeCount && editor.contains(sel.anchorNode)){editor._range=sel.getRangeAt(0).cloneRange();toolbar.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-pressed',String(document.queryCommandState(['bold','italic','underline','insertUnorderedList'][i]))));}};
     editor.addEventListener('input',()=>{sync();remember();});editor.addEventListener('keyup',remember);editor.addEventListener('mouseup',remember);editor.addEventListener('blur',remember);
     editor.addEventListener('paste',e=>{e.preventDefault();document.execCommand('insertText',false,e.clipboardData.getData('text/plain'));sync();});
     editor.addEventListener('drop',e=>e.preventDefault());
-    editor.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.execCommand('insertLineBreak');sync();}if((e.ctrlKey||e.metaKey) && ['b','i','u'].includes(e.key.toLowerCase())){e.preventDefault();toolbar.querySelectorAll('button')[['b','i','u'].indexOf(e.key.toLowerCase())].click();}});
+    editor.addEventListener('keydown',e=>{if(e.key==='Enter' && !document.queryCommandState('insertUnorderedList')){e.preventDefault();document.execCommand('insertLineBreak');sync();}if((e.ctrlKey||e.metaKey) && ['b','i','u'].includes(e.key.toLowerCase())){e.preventDefault();toolbar.querySelectorAll('button')[['b','i','u'].indexOf(e.key.toLowerCase())].click();}});
     input.hidden=true;input.required=false;input.insertAdjacentElement('afterend',wrap);wrap.append(toolbar,editor);
   });
 }
