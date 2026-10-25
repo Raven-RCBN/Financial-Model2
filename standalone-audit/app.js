@@ -799,7 +799,7 @@ function renderAuditEntry(entries) {
         <header>
           <div>
             <span class="eyebrow">Data Entry</span>
-            <h3>${state.auditEditingDraft ? "Edit saved draft" : "Mobile field audit form"}</h3>${state.auditNotifications?.configured === false ? '<p role="status">Email delivery is awaiting setup. Finalized assignments will be queued until email is configured.</p>' : ""}<p>Draft: save with any fields incomplete. Select Open and save to finalize and notify assigned users. Deadlines use the captured data-entry location; without location, Nigeria time applies.</p>
+            <h3>${state.auditEditingDraft ? "Edit saved draft" : "Field Audit Form"}</h3>${state.auditNotifications?.configured === false ? '<p role="status">Email delivery is awaiting setup. Finalized assignments will be queued until email is configured.</p>' : ""}<p>Draft: save with any fields incomplete. Select Open and save to finalize and notify assigned users. Deadlines use the captured data-entry location; without location, Nigeria time applies.</p>
           </div>
         </header>
         <div class="audit-form-grid">
