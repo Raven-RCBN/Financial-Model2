@@ -843,6 +843,10 @@ function renderAuditEntry(entries) {
             <select id="auditOwnerEmail" aria-describedby="auditOwnerEmailHint"><option value="">Select owner email</option>${draft.ownerEmail && !companyOwners().some(u=>u.email.toLowerCase()===draft.ownerEmail.toLowerCase())?`<option value="${escapeHtml(draft.ownerEmail)}" selected>${escapeHtml(draft.ownerEmail)} (previous selection)</option>`:''}${companyOwners().map(user=>`<option value="${escapeHtml(user.email)}" ${user.email.toLowerCase()===(draft.ownerEmail || '').toLowerCase()?'selected':''}>${escapeHtml(user.email)} — ${escapeHtml(user.name)}</option>`).join('')}</select>
           </label>
           <label class="field">
+            <span>Reference / asset tag</span>
+            <input id="auditReference" value="${escapeHtml(draft.reference || "")}" placeholder="Optional asset, invoice, block, or SOP reference" />
+          </label>
+          <label class="field">
             <span>Owner 2 name (optional)</span>
             <input id="auditOwner2" value="${escapeHtml(draft.owner2 || "")}" placeholder="Department HOD or action owner" />
           </label>
@@ -851,10 +855,6 @@ function renderAuditEntry(entries) {
             <select id="auditOwner2Email" aria-describedby="auditOwnerEmailHint"><option value="">Select owner email</option>${draft.owner2Email && !companyOwners().some(u=>u.email.toLowerCase()===draft.owner2Email.toLowerCase())?`<option value="${escapeHtml(draft.owner2Email)}" selected>${escapeHtml(draft.owner2Email)} (previous selection)</option>`:''}${companyOwners().map(user=>`<option value="${escapeHtml(user.email)}" ${user.email.toLowerCase()===(draft.owner2Email || '').toLowerCase()?'selected':''}>${escapeHtml(user.email)} — ${escapeHtml(user.name)}</option>`).join('')}</select>
           </label>
           </div>
-          <label class="field">
-            <span>Reference / asset tag</span>
-            <input id="auditReference" value="${escapeHtml(draft.reference || "")}" placeholder="Optional asset, invoice, block, or SOP reference" />
-          </label>
           <p id="auditOwnerEmailHint" class="audit-owner-hint">Select an email from the company user list. Both selected owners receive alerts for every recommendation.</p>
           <label class="field wide audit-observation-field">
             <span>Observations / Findings</span>
