@@ -71,3 +71,24 @@ test('one independently named owner receives every recommendation alert on each 
   }
  }
 });
+
+test('second independent owner persists and gets every alert with deduplication and company validation',()=>{
+ const users={p:[...directories.p,{name:'Deputy',email:'deputy@example.test',status:'Active',companyScope:'selected',companies:['ORE']}]};
+ const e=normalizeAuditEntry({...finalize(),owner2:'Manually typed deputy',owner2Email:'deputy@example.test'},'p');
+ assert.equal(e.owner2,'Manually typed deputy');assert.equal(e.owner2Email,'deputy@example.test');
+ const edited=applyAuditWrite(actor,{operation:'save-draft',baseUpdatedAt:e.updatedAt,owner2:'Deputy name',owner2Email:'deputy@example.test'},{...e,status:'Draft',createdBy:actor.userId},options);
+ assert.equal(edited.owner2,'Deputy name');assert.equal(edited.owner2Email,'deputy@example.test');
+ assert.doesNotThrow(()=>validateAuditAssignees({...e},users.p,[],{...options,company:'ORE'}));
+ assert.throws(()=>validateAuditAssignees({...e,owner2Email:'other@example.test'},users.p,[],{...options,company:'ORE'}),/active responsible owner/);
+ for(const [type,at] of [['assigned',now],['reminder',now],['due',new Date('2026-10-25T09:00:00Z')]]){
+  const jobs=notificationJobs([e],users,'',at).filter(j=>j.type===type);
+  assert(jobs.some(j=>j.to===e.ownerEmail));assert(jobs.some(j=>j.to===e.owner2Email));
+  assert(jobs.every(j=>j.text.includes('Owner 2: Manually typed deputy')));
+  const duplicate=notificationJobs([{...e,owner2Email:e.ownerEmail}],users,'',at).filter(j=>j.type===type&&j.to===e.ownerEmail);
+  assert.equal(duplicate.length,1);
+ }
+ for(const type of ['reopened','refinalized']){
+  const item={...e,lifecycleNotice:{type,revision:type,at:e.actions[0].assignedAt,assignees:[]}};
+  assert(notificationJobs([item],users,'',now).some(j=>j.type===type&&j.to===e.owner2Email));
+ }
+});

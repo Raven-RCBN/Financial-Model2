@@ -14,6 +14,7 @@ function reject(message, statusCode = 403) { throw Object.assign(new Error(messa
 function validDate(value) { return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value; }
 function validateOwnerEmail(entry) {
   if (entry.ownerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(entry.ownerEmail).trim())) reject('Enter a valid responsible owner email before finalizing.',400);
+  if (entry.owner2Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(entry.owner2Email).trim())) reject('Enter a valid owner 2 email before finalizing.',400);
 }
 export function validateAction(action) {
   if (!action || !String(action.description || "").trim() || !String(action.owner || "").trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(action.email || "") || !validDate(action.dueDate)) reject("Each action requires a description, responsible person, valid email and due date.", 400);
@@ -69,7 +70,7 @@ export function applyAuditWrite(identity, patch, existing, options = {}) {
     if (existing && patch.baseUpdatedAt !== existing.updatedAt) reject('This draft changed. Reopen it before saving.',409);
     const status = patch.status || 'Draft';
     if (!['Draft','Open'].includes(status)) reject('Select Open to finalize a draft.',400);
-    const fields = ['finding','findingStyles','impact','impactStyles','department','area','priority','location','reference','auditYear','owner','ownerEmail','dueDate','entity','photoDataUrl','photoUrl','photoName','geo','observationImages'];
+    const fields = ['finding','findingStyles','impact','impactStyles','department','area','priority','location','reference','auditYear','owner','ownerEmail','owner2','owner2Email','dueDate','entity','photoDataUrl','photoUrl','photoName','geo','observationImages'];
     const next = {...existing,...Object.fromEntries(fields.filter(k=>k in patch).map(k=>[k,patch[k]])),id:existing?.id || patch.id,status,createdBy:existing?.createdBy || identity.userId,capturedAt:existing?.capturedAt || now,updatedAt:now};
     for(const field of ['finding','impact'])if(field in patch && patch[field]!==existing?.[field] && !(field+'Styles' in patch))next[field+'Styles']=[];
     const actions = patch.actions || existing?.actions || [];
@@ -163,10 +164,10 @@ export function auditAssignees(users, reservedNames = []) {
 export function validateAuditAssignees(patch, users, reservedNames = [], options = {}) {
   if (options.drafts && patch.status === 'Draft' && (!patch.operation || patch.operation === 'save-draft')) return;
   const choices = auditAssignees(users,reservedNames);
-  if ((!patch.operation || patch.operation==='save-draft') && patch.ownerEmail) {
-    const owner=choices.find(u=>u.email.toLowerCase()===String(patch.ownerEmail).trim().toLowerCase() && (!options.company || auditUserInCompany(u,options.company)));
+  for (const field of ['ownerEmail','owner2Email']) if ((!patch.operation || patch.operation==='save-draft') && patch[field]) {
+    const owner=choices.find(u=>u.email.toLowerCase()===String(patch[field]).trim().toLowerCase() && (!options.company || auditUserInCompany(u,options.company)));
     if(!owner) reject('Select an active responsible owner email from this company’s Audit User Directory.',400);
-    patch.ownerEmail=owner.email;
+    patch[field]=owner.email;
   }
   const actions = ['add-action','update-action'].includes(patch.operation) ? [patch.action] : (!patch.operation || patch.operation === "save-draft") ? (patch.actions || []) : [];
   for (const action of actions) {

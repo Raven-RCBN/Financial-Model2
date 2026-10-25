@@ -484,3 +484,8 @@ records deleted and no service restart required.
 ### 25 October 2026 — bullet lists
 - Added compact Bullet list toggle beside Underline in Audit text editors. Native list editing supports Enter for the next item and toggling off. Stored plain text includes bullet characters, so existing report/PDF/email output retains lists without schema changes; reopening reconstructs editable lists while preserving B/I/U ranges.
 - Four text-format/bullet tests passed; synthetic browser verified creation, saved bullet text and reopening. Screenshot: local artifacts/bullet-list-20261025.png. Only app.js deployed to Malaysia; health OK. Backup: /home/deploy_audit/backups/before-bullet-list-20261025/app.js. No live record changes.
+
+### 25 October 2026 — two responsible owners
+- Owner 1 and optional Owner 2 each have independently typed names and company-scoped directory email selections. Responsive paired rows; both appear in View & Report. Legacy owner/ownerEmail retained, optional owner2/owner2Email added to normalization and draft edit permissions.
+- Both active eligible owner emails receive each recommendation's assignment, two-day reminder, due-day and reopen/refinalize alerts. Recipient deduplication and existing ledger keys preserved. Email body includes second owner when present.
+- 14 relevant tests passed, including two-owner save/normalization, all alert types, company validation and deduplication. Local synthetic browser save verified; no live test emails or record edits. Deployed five code files to Malaysia, health and file comparison passed. Server code backup: /home/deploy_audit/backups/before-two-owners-20261025. Shared module changes are additive; FM2 was not deployed or restarted.
