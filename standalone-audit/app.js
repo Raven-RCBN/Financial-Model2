@@ -708,7 +708,7 @@ function canEditAuditDraft(entry) {
 }
 
 function renderAuditActionTracking(entry) {
-  if(entry.status==='Draft')return `<section class="audit-action-tracking"><p>Draft — editable until finalized. Use Edit to update your draft, or the delete icon beside it to remove it. No assignment emails are sent and this item is excluded from PDF reports.</p></section>`;
+  if(entry.status==='Draft')return `<section class="audit-action-tracking"><p>Draft — editable until finalized. Use Edit to update your draft, or the delete icon beside it to remove it. No assignment emails are sent and this item is included only in draft PDF reports.</p></section>`;
   return `<section class="audit-action-tracking"><h4>Recommendations and corrective actions</h4><p>The finding and recommendation are finalized. Only the assigned user can record their corrective action below; administrators can make corrections.</p>${auditActionsFor(entry).map((action, index) => {
     const timing = auditActionTiming(action);
     const followup = action.responseDueDate ? auditActionTiming({dueDate: action.responseDueDate, status: action.status}) : null;
@@ -981,7 +981,7 @@ function renderAuditReport(entries) {
             <h3>${escapeHtml(auditEntityValue())} — Audit report ${escapeHtml(state.auditYear)}</h3>
           </div>
           <div class="input-actions">
-            <button class="action-icon add" id="downloadAuditReport" title="Download report PDF" aria-label="Download report PDF">
+            <button class="action-icon add" id="downloadAuditReport" title="${state.auditStatusFilter==='Draft'?'Download draft report PDF':'Download report PDF'}" aria-label="${state.auditStatusFilter==='Draft'?'Download draft report PDF':'Download report PDF'}">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
             </button>
           </div>
@@ -1336,8 +1336,8 @@ async function downloadAuditPdf() {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ auditYear: year, auditEntity: company }),
-      signal: AbortSignal.timeout(150000),
+      body: JSON.stringify({ auditYear: year, auditEntity: company, reportMode: state.auditStatusFilter === "Draft" ? "draft" : "final" }),
+      signal: AbortSignal.timeout(210000),
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));

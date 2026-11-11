@@ -65,7 +65,7 @@ async function renderPdf(script,payload){
  activePdfs++;
  try{return await new Promise((resolve,reject)=>{
  const child=spawn(pythonPath,[script],{env:{...process.env,AUDIT_UPLOAD_ROOT:auditUploadDir,AUDIT_BRAND_ROOT:path.join(dataDir,'branding')},stdio:['pipe','pipe','pipe']}),parts=[];let bytes=0;
- const timer=setTimeout(()=>child.kill(),120000);child.stdout.on('data',part=>{bytes+=part.length;if(bytes>80*1024*1024)child.kill();else parts.push(part);});child.stderr.resume();child.stdin.on('error',()=>{});child.on('error',reject);child.on('close',status=>{clearTimeout(timer);resolve({status,stdout:Buffer.concat(parts)});});child.stdin.end(JSON.stringify(payload));
+ const timer=setTimeout(()=>child.kill(),180000);child.stdout.on('data',part=>{bytes+=part.length;if(bytes>160*1024*1024)child.kill();else parts.push(part);});child.stderr.resume();child.stdin.on('error',()=>{});child.on('error',reject);child.on('close',status=>{clearTimeout(timer);resolve({status,stdout:Buffer.concat(parts)});});child.stdin.end(JSON.stringify(payload));
  });}finally{activePdfs--;}
 }
 async function handle(req,res){
@@ -171,15 +171,16 @@ async function handle(req,res){
   if(req.method!=='POST')return notFound(req,res);
   const patch=await bodyJson(req),year=String(patch.auditYear||'');
   const company=requireCompany(patch.auditEntity||patch.company);
-  const entries=companyEntries(await allAuditEntries(dbPath,projectId,year),context,company).filter(e=>e.status!=='Draft');
+  const draftReport=patch.reportMode==='draft';
+  const entries=companyEntries(await allAuditEntries(dbPath,projectId,year),context,company).filter(e=>draftReport ? e.status==='Draft' : e.status!=='Draft');
   if(!entries.length)return badRequest(req,res,'No findings for this company and report year.');
   const report=context.project.settings?.auditSourceReports?.[year];
-  const imported=report?.companyName===company;
+  const imported=!draftReport && report?.companyName===company;
   const reportSettings=companyReportSettings(context,company,year);
   const script=path.join(__dirname,'render_source_report.py');
-  const result=await renderPdf(script,{entries,reportSettings,auditEntity:company,sourceReport:imported?report:null,sourceDirectory:imported?path.join(dataDir,'reports',year):null,brandingLogoUrl:context.project.settings?.brandingLogoUrl});
+  const result=await renderPdf(script,{entries,reportSettings,draftReport,auditEntity:company,sourceReport:imported?report:null,sourceDirectory:imported?path.join(dataDir,'reports',year):null,brandingLogoUrl:context.project.settings?.brandingLogoUrl});
   if(result.status!==0)throw new Error('Audit PDF could not be generated. Check report data and server PDF dependencies.');
-  res.setHeader('Content-Disposition',`attachment; filename="audit-report-${year.replace(/[^0-9]/g,'')||'all'}.pdf"`);return send(req,res,200,result.stdout,'application/pdf');
+  res.setHeader('Content-Disposition',`attachment; filename="audit-${draftReport?'draft-':''}report-${year.replace(/[^0-9]/g,'')||'all'}.pdf"`);return send(req,res,200,result.stdout,'application/pdf');
  }
    let auditDirectories = directories;
   const auditUsers = auditDirectories[projectId] || [];

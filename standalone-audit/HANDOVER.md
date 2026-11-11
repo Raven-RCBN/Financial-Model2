@@ -492,3 +492,12 @@ records deleted and no service restart required.
 
 ### 25 October 2026 — owner field alignment
 - Owner group explicitly spans the full form width. Three equal columns place Owner 1 name, email and Reference on the same first row; Owner 2 sits below. Single-column layout on small screens. Verified equal input widths and identical top coordinates in local browser. Deployed app.js/styles.css only; Audit health OK. Backup: before-owner-alignment-20261025.
+
+### 10 November 2026 — draft department report preview (not deployed)
+- Local changes let Draft status download a separate draft PDF using current final-report renderer, grouping all departments and marking every page DRAFT / FOR REVIEW ONLY. Final downloads continue to exclude drafts and preserve imported original PDFs.
+- User requested all departments, not an individual department filter. OBAN 2026 sample generated read-only on Malaysia using isolated /home/deploy_audit/draft-sample-render-20261110.py; no production code deployed or records modified. Initial full-resolution image render failed; draft mode now resizes photos to max 1800px without cropping and JPEG quality 85 to control memory.
+- Sample: output/pdf/OBAN-2026-draft-by-department-sample.pdf outside source checkout. 16 draft findings, four departments (Accounts 2, HRA 6, Nursery 1, Plantation 7), 16 recommendation headings, all 255 evidence images, 277 pages / 86,373,007 bytes. Only requested finished PDF retrieved, not live JSON/photos/snapshots. Reviewed rendered cover, findings and evidence page. Two renderer tests pass; JS syntax/diff checks pass. Await user review before publishing.
+
+### 11 November 2026 — draft report publication
+- Published approved draft export from the Draft status filter. All departments grouped with clickable TOC, fresh pages per finding, DRAFT cover/header/footer and Agrinexus logo. Explicit Image references match side-by-side finding/photo table rows. Unreferenced evidence uses six-photo pages. PDF limit raised to 160 MiB / 180 seconds, browser timeout 210 seconds.
+- Renderer tests and JS syntax checks passed. Malaysia deployed app.js, server.mjs and render_source_report.py only. Health and release comparison passed. Backup /home/deploy_audit/backups/before-draft-report-20261111/code.tgz. Current sample 147 pages. Final downloads retain prior rendering branch. No record changes or test emails.
