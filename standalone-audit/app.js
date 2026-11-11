@@ -986,6 +986,7 @@ function renderAuditReport(entries) {
             </button>
           </div>
         </header>
+        <progress id="auditDownloadProgress" max="100" hidden aria-label="Report preparation and download progress" style="width:calc(100% - 2rem);height:14px;margin:12px 1rem 4px;accent-color:#175c2c"></progress>
         <p id="auditDownloadStatus" role="status" aria-live="polite" style="margin: 0 1rem;"></p>
         ${state.auditLinkedItem?`<p class="audit-linked-notice">Showing the audit item from your email. <button id="auditShowAll" class="secondary-button">Show all findings</button>${entries.length?'':' This item is no longer available in this company/year.'}</p>`:''}
         <div class="audit-report-tools">
@@ -1331,6 +1332,8 @@ async function downloadAuditPdf() {
   button?.setAttribute("disabled", "disabled");
   button?.setAttribute("aria-busy", "true");
   const originalIcon=button?.innerHTML;
+  const progressBar=qs("#auditDownloadProgress");
+  if(progressBar){progressBar.hidden=false;progressBar.removeAttribute("value");}
   const startedAt=Date.now();
   const progress=()=>showStatus(`Preparing ${company} report for ${year}… ${Math.floor((Date.now()-startedAt)/1000)} seconds. Large reports can take a few minutes. Your download will start automatically.`);
   progress();
@@ -1348,13 +1351,35 @@ async function downloadAuditPdf() {
       const error = await response.json().catch(() => ({}));
       throw new Error(response.status === 401 ? "Please sign in again, then download the report." : error.message || `PDF generation failed (${response.status}). Please retry.`);
     }
-    const blob = await response.blob();
+    clearInterval(progressTimer);
+    const total=Number(response.headers.get("Content-Length")) || 0;
+    const reader=response.body?.getReader();
+    const chunks=[];
+    let received=0;
+    let blob;
+    if(reader){
+      while(true){
+        const {done,value}=await reader.read();
+        if(done)break;
+        chunks.push(value);
+        received+=value.byteLength;
+        const percent=total?Math.min(100,Math.floor(received/total*100)):null;
+        if(progressBar && percent!==null)progressBar.value=percent;
+        showStatus(percent===null ? `Downloading report… ${(received/1048576).toFixed(1)} MB received` : `Downloading report… ${percent}% · ${(received/1048576).toFixed(1)} of ${(total/1048576).toFixed(1)} MB`);
+      }
+      blob=new Blob(chunks,{type:"application/pdf"});
+    }else{
+      showStatus("Downloading report…");
+      blob=await response.blob();
+    }
+    if(progressBar)progressBar.value=100;
     if (!response.headers.get("Content-Type")?.includes("application/pdf") || await blob.slice(0,5).text() !== "%PDF-") {
       throw new Error("The server did not return a PDF. Please sign in again and retry.");
     }
     downloadBlob(filenameFromDisposition(response.headers.get("Content-Disposition"), `audit-report-${year}.pdf`), blob);
     showStatus(`Downloaded ${company} report for ${year}. Check your browser’s downloads.`);
   } catch (error) {
+    if(progressBar)progressBar.hidden=true;
     showStatus(error.name === "TimeoutError" ? "The report took too long to prepare. Please retry." : error.message || "Audit PDF could not be generated.");
   } finally {
     clearInterval(progressTimer);
