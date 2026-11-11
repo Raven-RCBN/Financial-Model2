@@ -60,12 +60,15 @@ function sessionFor(req,directories,admin){try{const cookie=String(req.headers.c
 async function asset(req,res,file){try{return send(req,res,200,await fs.readFile(file),mime[path.extname(file)]||'application/octet-stream',{revalidate:true});}catch(e){if(e.code==='ENOENT')return notFound(req,res);throw e;}}
 const mobileFiles=new Set(['index.html','app.js','styles.css','core.mjs','manifest.json','sw.js']);
 let activePdfs=0;
+let lastPdf=null;
 async function renderPdf(script,payload){
+ const cacheKey=crypto.createHash('sha256').update(JSON.stringify([script,payload])).digest('hex');
+ if(lastPdf?.key===cacheKey && Date.now()-lastPdf.at<300000)return lastPdf.result;
  if(activePdfs>=2)fail('Two reports are being prepared. Please retry shortly.',429);
  activePdfs++;
  try{return await new Promise((resolve,reject)=>{
  const child=spawn(pythonPath,[script],{env:{...process.env,AUDIT_UPLOAD_ROOT:auditUploadDir,AUDIT_BRAND_ROOT:path.join(dataDir,'branding')},stdio:['pipe','pipe','pipe']}),parts=[];let bytes=0;
- const timer=setTimeout(()=>child.kill(),180000);child.stdout.on('data',part=>{bytes+=part.length;if(bytes>160*1024*1024)child.kill();else parts.push(part);});child.stderr.resume();child.stdin.on('error',()=>{});child.on('error',reject);child.on('close',status=>{clearTimeout(timer);resolve({status,stdout:Buffer.concat(parts)});});child.stdin.end(JSON.stringify(payload));
+ const timer=setTimeout(()=>child.kill(),180000);child.stdout.on('data',part=>{bytes+=part.length;if(bytes>160*1024*1024)child.kill();else parts.push(part);});child.stderr.resume();child.stdin.on('error',()=>{});child.on('error',reject);child.on('close',status=>{clearTimeout(timer);const result={status,stdout:Buffer.concat(parts)};if(status===0)lastPdf={key:cacheKey,at:Date.now(),result};resolve(result);});child.stdin.end(JSON.stringify(payload));
  });}finally{activePdfs--;}
 }
 async function handle(req,res){

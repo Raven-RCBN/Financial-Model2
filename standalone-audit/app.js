@@ -1330,14 +1330,19 @@ async function downloadAuditPdf() {
   const button = qs("#downloadAuditReport");
   button?.setAttribute("disabled", "disabled");
   button?.setAttribute("aria-busy", "true");
-  showStatus(`Preparing ${company} report for ${year}…`);
+  const originalIcon=button?.innerHTML;
+  const startedAt=Date.now();
+  const progress=()=>showStatus(`Preparing ${company} report for ${year}… ${Math.floor((Date.now()-startedAt)/1000)} seconds. Large reports can take a few minutes. Your download will start automatically.`);
+  progress();
+  const progressTimer=setInterval(progress,1000);
+  if(button)button.innerHTML='<span aria-hidden="true">…</span>';
   try {
     const response = await fetch(`/api/projects/${PROJECT_ID}/audit-pdf?download=1`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ auditYear: year, auditEntity: company, reportMode: state.auditStatusFilter === "Draft" ? "draft" : "final" }),
-      signal: AbortSignal.timeout(210000),
+      signal: AbortSignal.timeout(420000),
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
@@ -1352,8 +1357,10 @@ async function downloadAuditPdf() {
   } catch (error) {
     showStatus(error.name === "TimeoutError" ? "The report took too long to prepare. Please retry." : error.message || "Audit PDF could not be generated.");
   } finally {
+    clearInterval(progressTimer);
     auditDownloadPending = false;
     const currentButton = qs("#downloadAuditReport");
+    if(currentButton && button)currentButton.innerHTML=originalIcon;
     currentButton?.removeAttribute("disabled");
     currentButton?.removeAttribute("aria-busy");
   }
