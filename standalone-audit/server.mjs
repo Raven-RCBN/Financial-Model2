@@ -193,18 +193,20 @@ async function handle(req,res){
   }
   if (child === "audit-access") {
     if (!auditActor.userId) return forbidden(req, res);
-    if (req.method === "GET") return send(req, res, 200, {users: auditActor.admin ? auditUsers.map(({credential, ...user}) => user) : [], identity: auditActor, notifications: mailWorker.status(), assignees: visibleAssignees(auditUsers)}, "application/json; charset=utf-8", {cacheControl: "no-store"});
+    if (req.method === "GET") return send(req, res, 200, {users: auditActor.manageUsers ? auditUsers.map(({credential, ...user}) => user) : [], identity: auditActor, notifications: mailWorker.status(), assignees: visibleAssignees(auditUsers)}, "application/json; charset=utf-8", {cacheControl: "no-store"});
     if (req.method !== "PUT") return notFound(req, res);
-    if (!auditActor.admin) return forbidden(req, res, "Only administrators can assign audit permissions.");
+    if (!auditActor.manageUsers || (!auditActor.admin && auditActor.companyScope==='selected')) return forbidden(req, res, "User management permission and all-company access required.");
     const patch = await bodyJson(req);
     if (!Array.isArray(patch.users) || new Set(patch.users.map(user => String(user?.name || "").trim())).size !== patch.users.length) return badRequest(req, res, "Provide users with unique sign-in usernames.");
     if (patch.users.some(user => !user || typeof user.name !== "string" || !user.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email || ""))) return badRequest(req, res, "A username and valid email are required for each audit user.");
     const otherUsers = Object.entries(auditDirectories).filter(([id]) => id !== projectId).flatMap(([, users]) => users);
+    if(!auditActor.admin && auditUsers.some(u=>u.auditPermissions?.manageUsers && !patch.users.some(v=>v.id===u.id)))return forbidden(req,res,"Only administrators can remove user managers.");
     const users = [];
     for (const user of patch.users) {
       user.name = user.name.trim();
       if ([{userId:admin.name}].some(account => account.userId === user.name) || otherUsers.some(account => account.name === user.name)) return badRequest(req, res, "Audit usernames must be separate from administrator and other project accounts.");
       const existing = auditUsers.find(item => item.id === user.id && item.name === user.name);
+      if(!auditActor.admin && Boolean(user.auditPermissions?.manageUsers)!==Boolean(existing?.auditPermissions?.manageUsers))return forbidden(req,res,'Only administrators can grant or revoke user management.');
       const companyScope=user.companyScope ?? existing?.companyScope ?? 'all';
       const companies=companyScope==='selected' ? (user.companies ?? existing?.companies) : [];
       if(!['all','selected'].includes(companyScope) || !Array.isArray(companies) || companyScope==='selected' && (!companies.length || companies.some(name=>!auditCompanies(context).includes(name))))return badRequest(req,res,'Select valid companies or All companies for each user.');
@@ -212,7 +214,7 @@ async function handle(req,res){
       try { if (user.password) credential = hashAuditPassword(user.password); }
       catch (error) { return badRequest(req, res, error.message); }
       if (!credential) return badRequest(req, res, "Set a password of at least 12 characters for each new Audit account.");
-      users.push({companyScope,companies:[...new Set(companies)],id: String(user.id), name: user.name.trim(), email: String(user.email).trim().toLowerCase(), status: user.status === "Active" ? "Active" : "Inactive", credential, auditPermissions: {...((user.auditPermissions?.companySetup ?? existing?.auditPermissions?.companySetup) === true ? {companySetup:true} : {}),create: user.auditPermissions?.create === true, recommend: user.auditPermissions?.recommend === true, respond: user.auditPermissions?.respond === true}});
+      users.push({companyScope,companies:[...new Set(companies)],id: String(user.id), name: user.name.trim(), email: String(user.email).trim().toLowerCase(), status: user.status === "Active" ? "Active" : "Inactive", credential, auditPermissions: {...(user.auditPermissions?.manageUsers===true?{manageUsers:true}:{}),...((user.auditPermissions?.companySetup ?? existing?.auditPermissions?.companySetup) === true ? {companySetup:true} : {}),create: user.auditPermissions?.create === true, recommend: user.auditPermissions?.recommend === true, respond: user.auditPermissions?.respond === true}});
     }
     auditDirectories[projectId] = users;
     await atomicJson(auditUsersPath,auditDirectories);

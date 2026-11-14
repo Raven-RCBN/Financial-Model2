@@ -429,7 +429,7 @@ function renderAuditDirectory() {
   if (!target) return;
   if (state.currentSession?.role !== "admin") { target.innerHTML = ""; return; }
   const users = state.auditUsers || [];
-  target.innerHTML = users.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${[["companySetup", "Company setup"], ["create", "Audit creator"], ["recommend", "Recommendation author"], ["respond", "Assigned respondent"]].filter(([key]) => user.auditPermissions?.[key]).map(([, label]) => escapeHtml(label)).join("<br>") || "No permissions"}</td><td>${user.companyScope==='selected'?escapeHtml((user.companies||[]).join(", ")):"All companies"}</td><td>${escapeHtml(user.status)}</td><td><button class="secondary-button" data-edit-audit-user="${escapeHtml(user.id)}">Edit</button> <button class="secondary-button" data-delete-audit-user="${escapeHtml(user.id)}">Remove</button></td></tr>`).join("") || '<tr><td colspan="6">No audit users assigned. Add an audit user below.</td></tr>';
+  target.innerHTML = users.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${[["manageUsers", "User management"], ["companySetup", "Company setup"], ["create", "Audit creator"], ["recommend", "Recommendation author"], ["respond", "Assigned respondent"]].filter(([key]) => user.auditPermissions?.[key]).map(([, label]) => escapeHtml(label)).join("<br>") || "No permissions"}</td><td>${user.companyScope==='selected'?escapeHtml((user.companies||[]).join(", ")):"All companies"}</td><td>${escapeHtml(user.status)}</td><td><button class="secondary-button" data-edit-audit-user="${escapeHtml(user.id)}">Edit</button> <button class="secondary-button" data-delete-audit-user="${escapeHtml(user.id)}">Remove</button></td></tr>`).join("") || '<tr><td colspan="6">No audit users assigned. Add an audit user below.</td></tr>';
   const form = qs("#auditUserForm");
   form.onsubmit = async event => {
     event.preventDefault();
@@ -442,7 +442,7 @@ function renderAuditDirectory() {
     const companyScope=values.companyScope==='all'?'all':'selected';
     const companies=values.companyScope.startsWith('company:')?[values.companyScope.slice(8)]:Array.from(form.querySelectorAll('[name="companies"]:checked')).map(input=>input.value);
     if(companyScope==='selected'&&!companies.length){feedback.textContent='Select at least one company or choose All companies.';return;}
-    const user = {companyScope,companies:companyScope==='selected'?companies:[],id: values.id || crypto.randomUUID(), name, email, ...(values.password ? {password: values.password} : {}), status: values.status, auditPermissions: {companySetup: values.companySetup === "on", create: values.create === "on", recommend: values.recommend === "on", respond: values.respond === "on"}};
+    const user = {companyScope,companies:companyScope==='selected'?companies:[],id: values.id || crypto.randomUUID(), name, email, ...(values.password ? {password: values.password} : {}), status: values.status, auditPermissions: {manageUsers: state.currentSession.role==='admin' ? values.manageUsers === "on" : Boolean((state.auditUsers||[]).find(u=>u.id===values.id)?.auditPermissions?.manageUsers), companySetup: values.companySetup === "on", create: values.create === "on", recommend: values.recommend === "on", respond: values.respond === "on"}};
     const previous = structuredClone(users);
     state.auditUsers = [...users.filter(item => item.id !== user.id), user];
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
@@ -460,7 +460,7 @@ function renderAuditDirectory() {
   qsa("[data-edit-audit-user]").forEach(button => button.onclick = () => {
     const user = users.find(item => item.id === button.dataset.editAuditUser);
     for (const key of ["id", "name", "email", "status"]) form.elements[key].value = user[key] || "";
-    for (const key of ["create", "recommend", "respond", "companySetup"]) form.elements[key].checked = Boolean(user.auditPermissions?.[key]);
+    for (const key of ["create", "recommend", "respond", "companySetup", "manageUsers"]) form.elements[key].checked = Boolean(user.auditPermissions?.[key]);
     form.elements.companyScope.value=user.companyScope==='selected'?(user.companies?.length===1?'company:'+user.companies[0]:'selected'):'all';
     form.querySelectorAll('[name="companies"]').forEach(input=>input.checked=(user.companies||[]).includes(input.value));
     qs('#auditUserCompanies').hidden=form.elements.companyScope.value!=='selected';
@@ -1748,19 +1748,19 @@ async function requestJson(url, options={}) {
 function auditEntries(){return state.auditEntries||[];}
 function saveAuditEntries(entries){state.auditEntries=entries;}
 function showScreen(name){
-  const admin=name==='admin'&&auditPermission('companySetup');
+  const admin=name==='admin'&&(auditPermission('companySetup')||auditPermission('manageUsers'));
   qs('#adminWorkspace').hidden=!admin;qs('#audit').hidden=admin;
   qsa('[data-screen]').forEach(button=>button.classList.toggle('active',button.dataset.screen===(admin?'admin':'audit')));
   if(admin)renderStandaloneAdmin();else renderAudit().catch(error=>qs('#auditWorkspace').textContent=error.message);
 }
 function renderStandaloneAdmin(){
-  if(!auditPermission('companySetup'))return;
-  if(state.currentSession.role!=='admin'){qs('#adminWorkspace').innerHTML='<div class="page-head"><div><h2>Company setup</h2><p>Manage company details, audit options and report settings.</p></div></div><section id="companySettingsPanel"></section>';renderCompanySettings();return;}
+  if(!auditPermission('companySetup')&&!auditPermission('manageUsers'))return;
+  if(!auditPermission('manageUsers')){qs('#adminWorkspace').innerHTML='<div class="page-head"><div><h2>Company setup</h2><p>Manage company details, audit options and report settings.</p></div></div><section id="companySettingsPanel"></section>';renderCompanySettings();return;}
   const settings=projectSettings();const report=auditReportSettings();const setup=auditSetupSettings();
   const field=(name,label,value)=>`<label class="field"><span>${label}</span><input name="${name}" value="${escapeHtml(value||'')}" /></label>`;
   qs('#adminWorkspace').innerHTML=`<div class="page-head"><div><span class="eyebrow">Administrator</span><h2>Audit management</h2><p>Manage Audit users, roles, project details and report settings.</p><p>Email: ${state.auditNotifications?.configured ? "Configured" : "Awaiting SMTP setup"}. Administrator creator reminders: ${state.auditNotifications?.adminEmailConfigured ? "Configured" : "Administrator email required"}. Deadlines use the captured entry location; fallback: Nigeria (Africa/Lagos).</p></div></div>
   <article class="mc-panel user-directory-panel">
-                      <header><div><span class="eyebrow">Audit Users &amp; Roles</span><h3>Audit User Directory</h3></div><span class="status-pill">Admin only</span></header>
+                      <header><div><span class="eyebrow">Audit Users &amp; Roles</span><h3>Audit User Directory</h3></div><span class="status-pill">User management</span></header>
                       <p class="audit-directory-note">Manage audit assignments in this standalone Audit workspace. Administrators have all audit permissions. Create dedicated Audit sign-in accounts here. Audit users can access only the Audit module. Set a password when adding a user; leave it blank when editing to keep the current password.</p>
                       <div class="directory-scroll" tabindex="0" role="region" aria-label="Audit user directory"><table class="permission-table user-directory"><thead><tr><th>Sign-in username</th><th>Email</th><th>Audit roles</th><th>Companies</th><th>Status</th><th>Actions</th></tr></thead><tbody id="auditUserDirectory"></tbody></table></div>
                       <form id="auditUserForm" class="audit-directory-form">
@@ -1773,6 +1773,7 @@ function renderStandaloneAdmin(){
                         </div>
                         <div class="audit-user-company-scope"><label class="field"><span>Company access</span><select name="companyScope"><option value="all">All companies</option>${auditCompanyNames().map(name=>`<option value="company:${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')}<option value="selected">Multiple companies…</option></select></label><fieldset id="auditUserCompanies" hidden><legend>Select the companies this user can access</legend>${auditCompanyNames().map(name=>`<label class="audit-permission-option"><input type="checkbox" name="companies" value="${escapeHtml(name)}" /> ${escapeHtml(name)}</label>`).join('')}</fieldset></div>
                         <fieldset><legend>Audit roles — select one or more</legend>
+<label class="audit-permission-option"><input type="checkbox" name="manageUsers" /> User management — add and edit Audit users (administrator grants this permission)</label>
                           <label class="audit-permission-option"><input type="checkbox" name="companySetup" /> Company setup — manage company details, audit options and reports</label>
                           <label class="audit-permission-option"><input type="checkbox" name="create" /> Audit creator — create observations and findings</label>
                           <label class="audit-permission-option"><input type="checkbox" name="recommend" /> Recommendation author — add recommendations, owners and due dates</label>
@@ -1844,7 +1845,7 @@ async function init(){
  state.projectData=projectData;
  state.auditNotifications=access.notifications;state.auditIdentity=access.identity;state.auditUsers=access.users||[];state.auditAssignees=access.assignees||[];
  qs('#sessionUser').value=state.currentSession.userId;
- qs('#adminMenu').hidden=!auditPermission('companySetup');
+ qs('#adminMenu').hidden=!(auditPermission('companySetup')||auditPermission('manageUsers'));
  if(state.currentSession.role!=='admin')qs('#adminMenu').textContent='Company setup';
  qsa('[data-screen]').forEach(button=>button.onclick=()=>showScreen(button.dataset.screen));
  qsa('[data-audit-panel]').forEach(button=>{button.hidden=button.dataset.auditPanel==='entry'&&!auditPermission('create');button.onclick=()=>{state.selectedAuditPanel=button.dataset.auditPanel;showScreen('audit');};});
