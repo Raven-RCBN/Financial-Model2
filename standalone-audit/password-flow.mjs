@@ -23,3 +23,7 @@ export function passwordChallenges(){
   remove(id){pending.delete(id);}
  };
 }
+
+export function forgotPasswordPage(){
+ return passwordPage("Enter your username or registered email to request a verification code.").replaceAll("Change password","Forgot password").replace('action="/change-password"','action="/forgot-password"').replace('<label>Current password<input name="currentPassword" type="password" autocomplete="current-password" required></label>','<label>Username or registered email<input name="account" autocomplete="username" required maxlength="256"></label>');
+}

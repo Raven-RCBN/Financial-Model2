@@ -43,7 +43,7 @@ export function loginPage(error = '', next = '/app') {
         <label for="password">Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
         <button type="submit">Sign in</button>
       </form>
-      <p class="help">Need access or a password reset? Contact your Audit administrator.</p>
+      <p class="help"><a href="/forgot-password">Forgot password?</a></p><p class="help">Need access? Contact your Audit administrator.</p>
       <div class="mobile"><a href="/mobile-app/index.html">Open mobile &amp; offline workspace <span aria-hidden="true">↗</span></a><p>Sign in online and download your workspace before working offline.</p></div>
     </div></section>
   </main>

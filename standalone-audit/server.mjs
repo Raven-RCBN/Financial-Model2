@@ -1,4 +1,4 @@
-import {passwordPage,passwordChallenges} from './password-flow.mjs';
+import {passwordPage,passwordChallenges,forgotPasswordPage} from './password-flow.mjs';
 import {smtpSend} from './notifications.mjs';
 import {applyDeadlineStatus} from './deadline-status.mjs';
 import {companyProfiles,companyReportSettings,saveCompanyProfile,validateCompanyFields} from './company-config.mjs';
@@ -81,6 +81,20 @@ async function handle(req,res){
  const [directories,admin,context]=await Promise.all([readJson(auditUsersPath),readJson(path.join(dataDir,'admin-user.json')),readJson(dbPath)]);
  const session=sessionFor(req,directories,admin);
  if(url.pathname==='/logout'){res.setHeader('Set-Cookie',`${authCookieName}=; ${cookieOptions(req,0)}`);res.writeHead(303,{Location:'/login'});return res.end();}
+ if(url.pathname==='/forgot-password'){
+  if(req.method==='GET')return send(req,res,200,forgotPasswordPage(),'text/html');
+  if(req.method!=='POST')return notFound(req,res);
+  const form=new URLSearchParams(await bodyText(req));
+  const account=String(form.get('account')||'').trim().toLowerCase();
+  const candidates=[{...admin,email:process.env.AUDIT_ADMIN_EMAIL||admin.email},...Object.values(directories).flat().filter(u=>u.status==='Active')];
+  const matches=candidates.filter(u=>u.name.toLowerCase()===account||String(u.email||'').toLowerCase()===account);
+  let id=crypto.randomBytes(32).toString('hex');
+  if(matches.length===1&&matches[0].email){
+   try{id=await passwordVerification.begin(matches[0],'/app',smtpSend);}catch{}
+  }
+  res.setHeader('Set-Cookie','audit_password='+id+'; '+cookieOptions(req,600));
+  return send(req,res,200,passwordPage('If an active account matches, a verification code has been sent to its registered email. Enter the code and choose a new password.',true),'text/html');
+ }
  if(url.pathname==='/login'){
   if(req.method==='GET')return send(req,res,200,loginPage('',url.searchParams.get('next')),'text/html');
   if(req.method!=='POST')return notFound(req,res);
