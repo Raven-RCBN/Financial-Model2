@@ -90,7 +90,7 @@ export function notificationJobs(entries, directories, adminEmail, now = new Dat
   return jobs;
 }
 export function mailConfigured(env=process.env){return Boolean(env.AUDIT_SMTP_HOST && email(env.AUDIT_MAIL_FROM) && env.AUDIT_SMTP_USERNAME && env.AUDIT_SMTP_PASSWORD);}
-function smtpSend(job){
+export function smtpSend(job){
   return new Promise((resolve,reject)=>{
     const child=spawn(process.env.PYTHON || 'python3',[fileURLToPath(new URL('./send_mail.py',import.meta.url))],{stdio:['pipe','ignore','ignore']});
     const timer=setTimeout(()=>child.kill(),45000);child.on('error',e=>{clearTimeout(timer);reject(e);});child.on('close',code=>{clearTimeout(timer);code===0?resolve():reject(new Error('SMTP delivery failed'));});child.stdin.on('error',()=>{});child.stdin.end(JSON.stringify(job));

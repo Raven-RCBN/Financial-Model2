@@ -1,3 +1,5 @@
+import {passwordPage,passwordChallenges} from './password-flow.mjs';
+import {smtpSend} from './notifications.mjs';
 import {applyDeadlineStatus} from './deadline-status.mjs';
 import {companyProfiles,companyReportSettings,saveCompanyProfile,validateCompanyFields} from './company-config.mjs';
 import {entryTimeZone} from './timezone.mjs';
@@ -59,6 +61,7 @@ function sessionFor(req,directories,admin){try{const cookie=String(req.headers.c
 
 async function asset(req,res,file){try{return send(req,res,200,await fs.readFile(file),mime[path.extname(file)]||'application/octet-stream',{revalidate:true});}catch(e){if(e.code==='ENOENT')return notFound(req,res);throw e;}}
 const mobileFiles=new Set(['index.html','app.js','styles.css','core.mjs','manifest.json','sw.js']);
+const passwordVerification=passwordChallenges();
 let activePdfs=0;
 let lastPdf=null;
 async function renderPdf(script,payload){
@@ -83,8 +86,50 @@ async function handle(req,res){
   if(req.method!=='POST')return notFound(req,res);
   const form=new URLSearchParams(await bodyText(req));const user=userById(form.get('userid'),directories,admin);
   if(!user||!verifyAuditPassword(form.get('password'),user.credential))return send(req,res,401,loginPage('invalid',form.get('next')),'text/html');
+  if(user.role!=='admin' && (!user.emailVerifiedAt || user.mustChangePassword!==false)){
+   try{
+    const id=await passwordVerification.begin(user,safeAuditReturn(form.get('next')),smtpSend);
+    res.setHeader('Set-Cookie',`audit_password=${id}; ${cookieOptions(req,600)}`);
+    res.writeHead(303,{Location:'/change-password'});return res.end();
+   }catch(error){return send(req,res,503,passwordPage(error.message),'text/html');}
+  }
   const payload=Buffer.from(JSON.stringify({userId:user.userId,authVersion:user.credential.salt,expiresAt:Date.now()+sessionTtlMs})).toString('base64url');
   res.setHeader('Set-Cookie',`${authCookieName}=${payload}.${signature(payload)}; ${cookieOptions(req)}`);res.writeHead(303,{Location:safeAuditReturn(form.get('next'))});return res.end();
+ }
+ if(url.pathname==='/change-password'){
+  const id=String(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('audit_password='))?.slice(15);
+  const challenge=passwordVerification.get(id);
+  if(req.method==='GET'){
+   if(!challenge&&!session){res.writeHead(303,{Location:'/login'});return res.end();}
+   return send(req,res,200,passwordPage(challenge?'Enter the verification code sent to your registered email and choose a new password.':'Confirm your current password to receive a verification code.',Boolean(challenge)),'text/html');
+  }
+  if(req.method!=='POST')return notFound(req,res);
+  const form=new URLSearchParams(await bodyText(req));
+  if(!challenge){
+   const user=session&&userById(session.userId,directories,admin);
+   if(!user||!verifyAuditPassword(form.get('currentPassword'),user.credential))return send(req,res,400,passwordPage('Current password could not be verified.'),'text/html');
+   try{
+    const token=await passwordVerification.begin(user,'/app',smtpSend);
+    res.setHeader('Set-Cookie',`audit_password=${token}; ${cookieOptions(req,600)}`);res.writeHead(303,{Location:'/change-password'});return res.end();
+   }catch(error){return send(req,res,503,passwordPage(error.message),'text/html');}
+  }
+  const verified=passwordVerification.verify(id,form.get('code'));
+  const user=userById(challenge.userId,directories,admin);
+  if(!verified||!user||user.email!==challenge.email||user.credential.salt!==challenge.authVersion)return send(req,res,400,passwordPage('Verification failed or expired. Sign in again to request a new code.',true),'text/html');
+  const password=form.get('password');
+  if(password!==form.get('confirm')||verifyAuditPassword(password,user.credential))return send(req,res,400,passwordPage('Choose a different password and enter the same password in both fields.',true),'text/html');
+  let credential;
+  try{credential=hashAuditPassword(password);}catch(error){return send(req,res,400,passwordPage(error.message,true),'text/html');}
+  if(user.role==='admin'){
+   await atomicJson(path.join(dataDir,'admin-user.json'),{...admin,credential,emailVerifiedAt:new Date().toISOString(),mustChangePassword:false});
+  }else{
+   const account=Object.values(directories).flat().find(u=>u.name===user.name);
+   Object.assign(account,{credential,emailVerifiedAt:new Date().toISOString(),mustChangePassword:false});
+   await atomicJson(auditUsersPath,directories);
+  }
+  passwordVerification.remove(id);
+  res.setHeader('Set-Cookie',[`audit_password=; ${cookieOptions(req,0)}`,`${authCookieName}=; ${cookieOptions(req,0)}`]);
+  return send(req,res,200,passwordPage('Email verified and password updated. Sign in with your new password.'),'text/html');
  }
  if(!session){if(url.pathname.startsWith('/api/'))return send(req,res,401,{message:'Authentication required'});res.writeHead(303,{Location:'/login?next='+encodeURIComponent(safeAuditReturn(url.pathname+url.search))});return res.end();}
  if(url.pathname==='/api/session')return send(req,res,200,session);
@@ -214,7 +259,7 @@ async function handle(req,res){
       try { if (user.password) credential = hashAuditPassword(user.password); }
       catch (error) { return badRequest(req, res, error.message); }
       if (!credential) return badRequest(req, res, "Set a password of at least 12 characters for each new Audit account.");
-      users.push({companyScope,companies:[...new Set(companies)],id: String(user.id), name: user.name.trim(), email: String(user.email).trim().toLowerCase(), status: user.status === "Active" ? "Active" : "Inactive", credential, auditPermissions: {...(user.auditPermissions?.manageUsers===true?{manageUsers:true}:{}),...((user.auditPermissions?.companySetup ?? existing?.auditPermissions?.companySetup) === true ? {companySetup:true} : {}),create: user.auditPermissions?.create === true, recommend: user.auditPermissions?.recommend === true, respond: user.auditPermissions?.respond === true}});
+      users.push({emailVerifiedAt:existing?.email===String(user.email).trim().toLowerCase()?existing?.emailVerifiedAt:undefined,mustChangePassword:user.password?true:(existing?.mustChangePassword ?? true),companyScope,companies:[...new Set(companies)],id: String(user.id), name: user.name.trim(), email: String(user.email).trim().toLowerCase(), status: user.status === "Active" ? "Active" : "Inactive", credential, auditPermissions: {...(user.auditPermissions?.manageUsers===true?{manageUsers:true}:{}),...((user.auditPermissions?.companySetup ?? existing?.auditPermissions?.companySetup) === true ? {companySetup:true} : {}),create: user.auditPermissions?.create === true, recommend: user.auditPermissions?.recommend === true, respond: user.auditPermissions?.respond === true}});
     }
     auditDirectories[projectId] = users;
     await atomicJson(auditUsersPath,auditDirectories);
