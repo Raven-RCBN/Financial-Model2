@@ -258,6 +258,8 @@ async function handle(req,res){
     const patch = await bodyJson(req);
     if (!Array.isArray(patch.users) || new Set(patch.users.map(user => String(user?.name || "").trim())).size !== patch.users.length) return badRequest(req, res, "Provide users with unique sign-in usernames.");
     if (patch.users.some(user => !user || typeof user.name !== "string" || !user.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email || ""))) return badRequest(req, res, "A username and valid email are required for each audit user.");
+    const administratorName=String(admin.name).toLowerCase();
+    if(patch.users.some(user=>user.name.trim().toLowerCase()===administratorName || admin.id && user.id===admin.id))return forbidden(req,res,'Administrator accounts are protected. User managers cannot edit, reset passwords or delete them.');
     const otherUsers = Object.entries(auditDirectories).filter(([id]) => id !== projectId).flatMap(([, users]) => users);
     if(!auditActor.admin && auditUsers.some(u=>u.auditPermissions?.manageUsers && !patch.users.some(v=>v.id===u.id)))return forbidden(req,res,"Only administrators can remove user managers.");
     const users = [];
