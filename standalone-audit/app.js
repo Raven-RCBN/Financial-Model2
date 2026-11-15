@@ -427,7 +427,7 @@ function removeAuditSetupValue(type, value) {
 function renderAuditDirectory() {
   const target = qs("#auditUserDirectory");
   if (!target) return;
-  if (state.currentSession?.role !== "admin") { target.innerHTML = ""; return; }
+  if (!auditPermission("manageUsers")) { target.innerHTML = ""; return; }
   const users = state.auditUsers || [];
   target.innerHTML = users.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.email)}</td><td>${[["manageUsers", "User management"], ["companySetup", "Company setup"], ["create", "Audit creator"], ["recommend", "Recommendation author"], ["respond", "Assigned respondent"]].filter(([key]) => user.auditPermissions?.[key]).map(([, label]) => escapeHtml(label)).join("<br>") || "No permissions"}</td><td>${user.companyScope==='selected'?escapeHtml((user.companies||[]).join(", ")):"All companies"}</td><td>${escapeHtml(user.status)}</td><td><button class="secondary-button" data-edit-audit-user="${escapeHtml(user.id)}">Edit</button> <button class="secondary-button" data-delete-audit-user="${escapeHtml(user.id)}">Remove</button></td></tr>`).join("") || '<tr><td colspan="6">No audit users assigned. Add an audit user below.</td></tr>';
   const form = qs("#auditUserForm");
@@ -1846,7 +1846,7 @@ async function init(){
  state.auditNotifications=access.notifications;state.auditIdentity=access.identity;state.auditUsers=access.users||[];state.auditAssignees=access.assignees||[];
  qs('#sessionUser').value=state.currentSession.userId;
  qs('#adminMenu').hidden=!(auditPermission('companySetup')||auditPermission('manageUsers'));
- if(state.currentSession.role!=='admin')qs('#adminMenu').textContent='Company setup';
+ if(state.currentSession.role!=='admin')qs('#adminMenu').textContent=auditPermission('manageUsers')?'Audit management':'Company setup';
  qsa('[data-screen]').forEach(button=>button.onclick=()=>showScreen(button.dataset.screen));
  qsa('[data-audit-panel]').forEach(button=>{button.hidden=button.dataset.auditPanel==='entry'&&!auditPermission('create');button.onclick=()=>{state.selectedAuditPanel=button.dataset.auditPanel;showScreen('audit');};});
  state.selectedAuditPanel=auditPermission('create')?'entry':'report';
