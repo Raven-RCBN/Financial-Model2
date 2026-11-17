@@ -4781,3 +4781,20 @@ h1, h2, h3, h4, h5, h6 { line-height: 1.3; }
 .audit-owner-fields { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px 16px; align-items: start; }
 .audit-owner-fields .field { min-width: 0; align-content: start; }
 @media(max-width:600px) { .audit-owner-fields { grid-template-columns: 1fr; } }
+
+.audit-finding-body > .audit-narrative {
+  padding: 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(40,70,45,.12);
+  gap: 12px;
+}
+.audit-finding-body > .audit-narrative > b {
+  display: block;
+  font-size: 20px;
+  font-weight: 750;
+  line-height: 1.35;
+  color: #204b31;
+}
+.audit-narrative-observation { background: #f7f0e2; }
+.audit-narrative-impact { background: #edf5fc; }
+.audit-narrative-recommendation { background: #edf6e9; }
