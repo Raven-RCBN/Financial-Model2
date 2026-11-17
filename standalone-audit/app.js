@@ -989,6 +989,7 @@ function renderAuditReport(entries) {
         <progress id="auditDownloadProgress" max="100" hidden aria-label="Report preparation and download progress" style="width:calc(100% - 2rem);height:14px;margin:12px 1rem 4px;accent-color:#175c2c"></progress>
         <p id="auditDownloadStatus" role="status" aria-live="polite" style="margin: 0 1rem;"></p>
         ${state.auditLinkedItem?`<p class="audit-linked-notice">Showing the audit item from your email. <button id="auditShowAll" class="secondary-button">Show all findings</button>${entries.length?'':' This item is no longer available in this company/year.'}</p>`:''}
+        ${state.auditSearch?`<p role="status" style="margin:1rem">${state.auditTotal} findings matching <strong>“${escapeHtml(state.auditSearch)}”</strong></p>`:""}
         <div class="audit-report-tools">
           <label>
             <span>Report year</span>
@@ -1004,7 +1005,7 @@ function renderAuditReport(entries) {
             </div>
           </form>
           <label>
-            <span>Item status</span><select id="auditStatusFilter">${["","Draft","Open","In progress","Closed"].map(v=>`<option value="${v}" ${v===state.auditStatusFilter?"selected":""}>${v||"All statuses"}</option>`).join("")}</select></label><label><span>Rows</span>
+            <span>Item status</span><select id="auditStatusFilter">${["","Draft","Open","Closed"].map(v=>`<option value="${v}" ${v===state.auditStatusFilter?"selected":""}>${v||"All statuses"}</option>`).join("")}</select></label><label><span>Rows</span>
             <select id="auditPageSize">
               ${[5, 10, 20, 50].map((size) => `<option value="${size}" ${size === state.auditPageSize ? "selected" : ""}>${size}</option>`).join("")}
             </select>
@@ -1604,6 +1605,7 @@ function bindAuditEvents() {
   bindEvent("#auditSearchForm", "submit", (event) => {
     event.preventDefault();
     state.auditLinkedItem="";state.auditLinkedAction="";
+    state.auditSearchDraft = qs("#auditSearch")?.value || "";
     state.auditSearch = state.auditSearchDraft.trim();
     state.auditPage = 1;
     renderAudit();
@@ -1729,6 +1731,26 @@ async function renderAudit() {
   `;
   bindAuditEvents();
   applyBrandingLogo();
+  if(state.selectedAuditPanel==='report' && state.auditSearch){
+    const root=qs('#auditReportPage');
+    if(root){
+      const terms=state.auditSearch.trim().split(/\s+/).filter(Boolean);
+      const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+      const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+      for(const node of nodes){
+        if(node.parentElement.closest('button,input,textarea,select,[contenteditable],script,style'))continue;
+        const text=node.textContent,lower=text.toLowerCase();
+        const ranges=[];
+        for(const term of terms){let from=0,index;while((index=lower.indexOf(term.toLowerCase(),from))!==-1){ranges.push([index,index+term.length]);from=index+term.length;}}
+        if(!ranges.length)continue;
+        ranges.sort((a,b)=>a[0]-b[0]);const merged=[];
+        for(const range of ranges){const previous=merged.at(-1);if(previous && range[0]<=previous[1])previous[1]=Math.max(previous[1],range[1]);else merged.push(range);}
+        const fragment=document.createDocumentFragment();let offset=0;
+        for(const [start,end] of merged){fragment.append(text.slice(offset,start));const mark=document.createElement('mark');mark.textContent=text.slice(start,end);fragment.append(mark);offset=end;}
+        fragment.append(text.slice(offset));node.replaceWith(fragment);
+      }
+    }
+  }
 }
 
 document.addEventListener('change', event => {

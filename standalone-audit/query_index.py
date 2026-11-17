@@ -14,7 +14,7 @@ CREATE INDEX IF NOT EXISTS company_year_department ON entries(project,company,ye
 CREATE INDEX IF NOT EXISTS company_year_status ON entries(project,company,year,status,issue,captured DESC,id);
 ''')
 def revision():
-    s=source.stat();return f"v1:{s.st_ino}:{s.st_size}:{s.st_mtime_ns}:{args['fallbackCompany']}"
+    s=source.stat();return f"v2:{s.st_ino}:{s.st_size}:{s.st_mtime_ns}:{args['fallbackCompany']}"
 rev=revision();previous=db.execute("SELECT value FROM metadata WHERE key='revision'").fetchone()
 if not previous or previous[0]!=rev:
     # Recheck after acquiring the rebuild lock; a parallel reader may already have rebuilt it.
@@ -24,6 +24,11 @@ if not previous or previous[0]!=rev:
         db.execute('DELETE FROM entries')
         def indexed(e):
             r=e.get('sourceReport') or {};text=' '.join(str(e.get(k) or '') for k in ['finding','department','location','reference','impact','recommendation'])+' '+str(r.get('managementResponse') or '')
+            text+=' '+ ' '.join(str(e.get(k) or '') for k in ['area','owner','ownerEmail','owner2','owner2Email','createdBy'])
+            for action in e.get('actions') or []:
+                text+=' '+' '.join(str(action.get(k) or '') for k in ['description','owner','email'])
+                text+=' '+' '.join(str(reply.get('text') or '') for reply in action.get('responses') or [])
+            text+=' '+' '.join(str(image.get('description') or '') for image in e.get('observationImages') or [])
             return (e['projectId'],e.get('entity') or args['fallbackCompany'],str(e.get('auditYear') or '2025'),e['id'],e.get('department') or 'Unassigned',e.get('status') or 'Open',e.get('priority') or 'High',r.get('issue') or 10000,e.get('capturedAt') or '',text.lower(),int(bool(r or e.get('photoUrl') or e.get('photoDataUrl') or e.get('observationImages'))),sum(a.get('status')!='Closed' for a in e.get('actions',[])),json.dumps(e,separators=(',',':'),ensure_ascii=False))
         db.executemany('INSERT INTO entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',(indexed(e) for e in rows))
         db.execute("INSERT OR REPLACE INTO metadata VALUES ('revision',?)",(rev,))
@@ -32,7 +37,8 @@ db.execute('BEGIN')
 q=args['query'];base=[args['projectId'],args['company']];where='project=? AND company=?';params=base.copy()
 for param,col in [('entryId','id'),('auditYear','year'),('department','department'),('status','status')]:
     if q.get(param):where+=' AND '+col+'=?';params.append(str(q[param]))
-if q.get('q'):where+=' AND instr(search,?)>0';params.append(str(q['q']).lower())
+for term in str(q.get('q') or '').lower().split():
+    where+=' AND instr(search,?)>0';params.append(term)
 def integer(key,default,maximum):
     try:return min(maximum,max(1,int(q.get(key,default))))
     except (TypeError,ValueError):return default
