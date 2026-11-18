@@ -35,6 +35,13 @@ if not previous or previous[0]!=rev:
     db.commit()
 db.execute('BEGIN')
 q=args['query'];base=[args['projectId'],args['company']];where='project=? AND company=?';params=base.copy()
+visibility=args.get('visibility')
+base_where='project=? AND company=?'
+if visibility is not None:
+    email=str(visibility.get('email') or '').strip().lower()
+    base_where+=" AND status != 'Draft' AND ? != '' AND (lower(trim(coalesce(json_extract(payload,'$.ownerEmail'),'')))=? OR lower(trim(coalesce(json_extract(payload,'$.owner2Email'),'')))=? OR EXISTS (SELECT 1 FROM json_each(entries.payload,'$.actions') a WHERE lower(trim(coalesce(json_extract(a.value,'$.email'),'')))=?))"
+    base.extend([email,email,email,email])
+where=base_where;params=base.copy()
 for param,col in [('entryId','id'),('auditYear','year'),('department','department'),('status','status')]:
     if q.get(param):where+=' AND '+col+'=?';params.append(str(q[param]))
 for term in str(q.get('q') or '').lower().split():
@@ -45,7 +52,7 @@ def integer(key,default,maximum):
 size=integer('pageSize',10,100);page=integer('page',1,2147483647)
 summary=db.execute('SELECT count(*),coalesce(sum(priority IN (\'High\',\'Critical\')),0),coalesce(sum(evidence),0),coalesce(sum(open_actions),0) FROM entries WHERE '+where,params).fetchone();total=summary[0];page=min(page,max(1,math.ceil(total/size)))
 departments=[[r[0],dict(zip(['total','high','medium','low','open'],r[1:]))] for r in db.execute("SELECT department,count(*),sum(priority IN ('High','Critical')),sum(priority='Medium'),sum(priority='Low'),sum(status!='Closed') FROM entries WHERE "+where+' GROUP BY department ORDER BY department',params)]
-years=dict(db.execute('SELECT year,count(*) FROM entries WHERE project=? AND company=? GROUP BY year',base))
+years=dict(db.execute('SELECT year,count(*) FROM entries WHERE '+base_where+' GROUP BY year',base))
 items=[json.loads(row[0]) for row in db.execute('SELECT payload FROM entries WHERE '+where+' ORDER BY issue,captured DESC,id LIMIT ? OFFSET ?',params+[size,(page-1)*size])]
 result={'backend':'json','queryEngine':'sqlite','page':page,'pageSize':size,'total':total,'company':args['company'],'items':items,'yearCounts':years,'summary':{'total':total,'high':summary[1],'evidence':summary[2],'openActions':summary[3],'departments':departments}}
 if args.get('explain'):result['queryPlan']=[list(r) for r in db.execute('EXPLAIN QUERY PLAN SELECT payload FROM entries WHERE '+where+' ORDER BY issue,captured DESC,id LIMIT ? OFFSET ?',params+[size,(page-1)*size])]

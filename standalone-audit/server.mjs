@@ -1,3 +1,4 @@
+import {assignedIssueScope,canViewIssue} from './issue-access.mjs';
 import {passwordPage,passwordChallenges,forgotPasswordPage} from './password-flow.mjs';
 import {smtpSend} from './notifications.mjs';
 import {applyDeadlineStatus} from './deadline-status.mjs';
@@ -154,6 +155,8 @@ async function handle(req,res){
  const projectId=context.project.id;
  if(session.role!=='admin'&&!session.projectIds?.includes(projectId))return forbidden(req,res,'Audit project access required.'); const auditActor={...auditIdentity(session,directories[projectId]||[]),timeZone:workflowOptions.timeZone};
  if(auditActor.admin)auditActor.email=process.env.AUDIT_ADMIN_EMAIL || admin.email || '';
+ const issueScope=assignedIssueScope(auditActor);
+ const visibleIssue=entry=>auditUserInCompany(auditActor,entry.entity||context.company.name)&&canViewIssue(auditActor,entry);
  const allowedCompanies=auditCompanies(context).filter(name=>auditUserInCompany(auditActor,name));
  const requireCompany=name=>{const company=selectedCompany(context,name || allowedCompanies[0]);if(!auditUserInCompany(auditActor,company))fail('You do not have access to this company.',403);return company;};
  const assignmentOptions=entry=>({...workflowOptions,company:entry?.entity || context.company.name});
@@ -163,9 +166,9 @@ async function handle(req,res){
   return {company:{name:companies[0]||''},project:{id:projectId,name:profile?.projectName||'',settings:{auditSetup:profile?.auditSetup,auditReport:profile?.auditReport,brandingLogoUrl:settings.brandingLogoUrl,auditCompanies:companies,auditCompanyProfiles:Object.fromEntries(Object.entries(profiles).filter(([name])=>companies.includes(name))),auditSourceReports:Object.fromEntries(Object.entries(settings.auditSourceReports||{}).filter(([,r])=>companies.includes(r.companyName))),auditReportsByYear:profile?.auditReportsByYear}}};
  };
  const verifyImageReferences=async entry=>{
-  if(auditActor.admin || auditActor.companyScope!=='selected')return;
+  if(!issueScope && (auditActor.admin || auditActor.companyScope!=='selected'))return;
   const refs=e=>[e.photoUrl,...(e.observationImages||[]).map(i=>i.url),...(e.actions||[]).flatMap(a=>(a.responses||[]).flatMap(r=>(r.images||[]).map(i=>i.url)))].filter(Boolean);
-  const rows=await allAuditEntries(dbPath,projectId),allowed=new Set(rows.filter(e=>auditUserInCompany(auditActor,e.entity||context.company.name)).flatMap(refs));
+  const rows=await allAuditEntries(dbPath,projectId),allowed=new Set(rows.filter(visibleIssue).flatMap(refs));
   if(refs(entry).some(url=>!allowed.has(url)))fail('Evidence must belong to a company you can access, or be uploaded as a new image.',403);
  };
 
@@ -173,12 +176,12 @@ async function handle(req,res){
  if(url.pathname.startsWith('/audit/uploads/')){
   const prefix='/audit/uploads/'+safeFileSegment(projectId)+'/';
   if(!url.pathname.startsWith(prefix)||!/^[-a-zA-Z0-9_./]+$/.test(url.pathname)||url.pathname.includes('..'))return forbidden(req,res);
-  if(auditActor.companyScope==='selected' && !auditActor.admin){const rows=await allAuditEntries(dbPath,projectId);const referenced=e=>e.photoUrl===url.pathname || (e.observationImages||[]).some(i=>i.url===url.pathname) || (e.actions||[]).some(a=>(a.responses||[]).some(r=>(r.images||[]).some(i=>i.url===url.pathname)));if(!rows.some(e=>auditUserInCompany(auditActor,e.entity||context.company.name)&&referenced(e)))return forbidden(req,res,'Company access required.');}
+  if(issueScope || (auditActor.companyScope==='selected' && !auditActor.admin)){const rows=await allAuditEntries(dbPath,projectId);const referenced=e=>e.photoUrl===url.pathname || (e.observationImages||[]).some(i=>i.url===url.pathname) || (e.actions||[]).some(a=>(a.responses||[]).some(r=>(r.images||[]).some(i=>i.url===url.pathname)));if(!rows.some(e=>visibleIssue(e)&&referenced(e)))return forbidden(req,res,'Company access required.');}
   return asset(req,res,path.join(auditUploadDir,url.pathname.slice('/audit/uploads/'.length)));
  }
  if(/^\/audit\/evidence\/[-a-zA-Z0-9_]+\.(png|jpe?g|webp)$/.test(url.pathname)){
   const entries=await allAuditEntries(dbPath,projectId);
-  if(!entries.some(e=>auditUserInCompany(auditActor,e.entity||context.company.name)&&(e.photoUrl===url.pathname||e.observationImages?.some(i=>i.url===url.pathname))))return forbidden(req,res);
+  if(!entries.some(e=>visibleIssue(e)&&(e.photoUrl===url.pathname||e.observationImages?.some(i=>i.url===url.pathname))))return forbidden(req,res);
   return asset(req,res,path.join(assetRoot,url.pathname));
  }
  const match=url.pathname.match(/^\/api\/projects\/([^/]+)\/(audit-context|audit-access|audit-entries|audit-sync|audit-settings|audit-branding|audit-pdf|audit-source-report|audit-source-import)$/);
@@ -221,6 +224,7 @@ async function handle(req,res){
   return send(req,res,200,await importSourceReports(dataDir,path.join(path.dirname(dataDir),'releases',patch.packageName)));
  }
  if(child==='audit-source-report'){
+  if(issueScope)return forbidden(req,res,'Full source reports are unavailable. Download your assigned issues instead.');
   if(req.method!=='GET')return notFound(req,res);
   const year=url.searchParams.get('auditYear'),company=requireCompany(url.searchParams.get('company'));
   const report=context.project.settings?.auditSourceReports?.[year];
@@ -234,10 +238,10 @@ async function handle(req,res){
   const patch=await bodyJson(req),year=String(patch.auditYear||'');
   const company=requireCompany(patch.auditEntity||patch.company);
   const draftReport=patch.reportMode==='draft';
-  const entries=companyEntries(await allAuditEntries(dbPath,projectId,year),context,company).filter(e=>draftReport ? e.status==='Draft' : e.status!=='Draft');
+  const entries=companyEntries(await allAuditEntries(dbPath,projectId,year),context,company).filter(visibleIssue).filter(e=>draftReport ? e.status==='Draft' : e.status!=='Draft');
   if(!entries.length)return badRequest(req,res,'No findings for this company and report year.');
   const report=context.project.settings?.auditSourceReports?.[year];
-  const imported=!draftReport && report?.companyName===company;
+  const imported=!issueScope && !draftReport && report?.companyName===company;
   const reportSettings=companyReportSettings(context,company,year);
   const script=path.join(__dirname,'render_source_report.py');
   const result=await renderPdf(script,{entries,reportSettings,draftReport,auditEntity:company,sourceReport:imported?report:null,sourceDirectory:imported?path.join(dataDir,'reports',year):null,brandingLogoUrl:context.project.settings?.brandingLogoUrl});
@@ -287,6 +291,7 @@ async function handle(req,res){
       const request = await bodyJson(req);
       const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === request.patch?.id);
       requireCompany(existing?.entity || request.patch.entity);
+      if(existing&&!visibleIssue(existing))return forbidden(req,res,'This issue is not assigned to you.');
       if(existing?.sourceReport&&request.patch.operation==='update-finding')return forbidden(req,res,'Issued report observations are preserved. Add a new finding or corrective action instead.');
       const prepared = prepareMobileWrite(auditActor, request, existing, {...workflowOptions,timeZone:entryTimeZone(existing)});
       if(!existing){prepared.entry.entity=requireCompany(request.patch.entity);delete prepared.entry.sourceReport;}
@@ -309,7 +314,7 @@ async function handle(req,res){
     if (!session) return forbidden(req, res, "Audit access requires a signed-in user.");
     if (req.method === "GET") {
       url.searchParams.set('company',requireCompany(url.searchParams.get('company')));
-      const listing=await indexedReportListing(dataDir,context,url.searchParams);
+      const listing=await indexedReportListing(dataDir,context,url.searchParams,issueScope);
       return send(req,res,200,{...listing,items:listing.items.map(entry=>({...entry,timeZone:entryTimeZone(entry)}))});
     }
     if (req.method === "DELETE") {
@@ -331,6 +336,7 @@ async function handle(req,res){
         const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === patch.id);
         if(patch.operation==='save-draft' && !existing)fail('Draft not found. It may have been deleted.',404);
         requireCompany(existing?.entity || patch.entity);
+        if(existing&&!visibleIssue(existing))return forbidden(req,res,'This issue is not assigned to you.');
         if(!existing || existing.status==='Draft'){patch.entity=requireCompany(patch.entity || existing?.entity);delete patch.sourceReport;}
         validateAuditAssignees(patch, auditUsers, [admin.name], assignmentOptions(existing?.status==='Draft' ? patch : existing || patch));
         const authorized = applyAuditWrite(auditActor, patch, existing, {...workflowOptions,timeZone:entryTimeZone(existing)});

@@ -501,3 +501,16 @@ records deleted and no service restart required.
 ### 11 November 2026 — draft report publication
 - Published approved draft export from the Draft status filter. All departments grouped with clickable TOC, fresh pages per finding, DRAFT cover/header/footer and Agrinexus logo. Explicit Image references match side-by-side finding/photo table rows. Unreferenced evidence uses six-photo pages. PDF limit raised to 160 MiB / 180 seconds, browser timeout 210 seconds.
 - Renderer tests and JS syntax checks passed. Malaysia deployed app.js, server.mjs and render_source_report.py only. Health and release comparison passed. Backup /home/deploy_audit/backups/before-draft-report-20261111/code.tgz. Current sample 147 pages. Final downloads retain prior rendering branch. No record changes or test emails.
+
+### 19 November 2026 — assigned issue visibility and downloads
+- Respondent-only/view-only accounts now see finalized issues assigned by recommendation email or Owner 1/Owner 2 email, within their permitted companies. Admin/create/recommend roles retain company-wide oversight. Drafts are hidden from assigned-only accounts.
+- SQLite filtering applies before pagination, search, exact-item links, card/department aggregates and year counts. Query cache includes the server-derived assignment scope; request parameters cannot override it.
+- Evidence URLs, existing-record write/sync lookups and reused image references enforce the same visibility. Assigned-only PDF exports render only permitted issues as a new PDF; full source-report downloads and original-PDF merging are blocked for these accounts.
+- 19 focused synthetic tests passed (HTTP authorization, PDF renderer payload, cache isolation, query/workflow/mobile). Actual synthetic imported finding rendered to a standalone PDF using production Python libraries without reading live records.
+- Built using standard release tooling; deployed only server.mjs, query-store.mjs, query_index.py and new issue-access.mjs to Malaysia Audit. Baseline hashes matched; backup /home/deploy_audit/backups/before-assigned-access-20261119/code.tgz. Audit-only restart; deployed hashes match release. No live record edits or test emails; shared FM2 modules unchanged.
+- Loopback and https://audit.agrinexus.ai/healthz returned 200. Legacy https://audit.digitalpalm.ai/healthz returned 410 during verification; routing left unchanged.
+
+### 19 November 2026 — respondent image comments
+- Each respondent upload/camera preview now has a numbered Image comment / label textarea (up to 2,000 characters). Comments stay attached to their images when other images are added or removed and use existing response-image description storage, saved display and PDF captions.
+- Five synthetic access/evidence tests passed, including uploaded comment persistence and PDF payload. Chrome verified comment entry, add/remove preservation, renumbering and safe text rendering.
+- Standard release built; deployed app.js only with baseline/hash verification and backup /home/deploy_audit/backups/before-respondent-image-labels-20261119/app.js. Main public health200. No restart, live record writes or FM2 changes.
