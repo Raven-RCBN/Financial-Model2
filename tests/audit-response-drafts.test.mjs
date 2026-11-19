@@ -28,3 +28,21 @@ test('deadline is inclusive in entry timezone, with assignment, ownership and st
  assert(prepareResponse(actor,{...patch,text:''},entry,null,options).draft);
  assert.throws(()=>prepareResponse(actor,{...patch,operation:'submit-reply',text:''},entry,null,options),{statusCode:400});
 });
+
+test('save and submit accept response/photo changes through due-date end, then reject every change',()=>{
+ const image={name:'replacement.png',description:'Fixed drain',dataUrl:'data:image/png;base64,iVBORw0KGgo='};
+ for(const timeZone of ['Asia/Kuala_Lumpur','Africa/Lagos']){
+  const boundary=timeZone==='Asia/Kuala_Lumpur'?'2026-11-19T16:00:00Z':'2026-11-19T23:00:00Z';
+  const lastMoment=new Date(Date.parse(boundary)-1),after=new Date(boundary);
+  for(const operation of ['save-reply-draft','submit-reply']){
+   for(const images of [[],[image],[{url:'/audit/uploads/p/fix.jpg',description:'Revised label'}]]){
+    const change={...patch,operation,text:'Edited response',images};
+    const result=prepareResponse(actor,change,entry,null,{...options,timeZone,now:lastMoment});
+    assert(result.draft||result.entry);
+    assert.throws(()=>prepareResponse(actor,change,entry,null,{...options,timeZone,now:after}),{statusCode:403});
+   }
+  }
+ }
+ assert.equal(entry.actions[0].responses[0].text,'Previously saved');
+ assert.equal(entry.actions[0].responses[0].images[0].description,'Old label');
+});

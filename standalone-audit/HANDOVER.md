@@ -521,3 +521,8 @@ records deleted and no service restart required.
 - Shared FM2/store/workflow modules unchanged; standalone response-drafts.mjs owns the new operations. Standard release builder includes and rewrites its shared imports. Parallel startup reads preserved.
 - 23 focused synthetic tests passed, including due-date timezone boundary, stale windows, private persistence, existing-image ownership, no draft content in PDF payload and existing response replacement. Full Chrome localhost flow passed save/reload draft with photo/label, submit, edit, resave/reload and replace without duplication or page errors.
 - Deployed only app.js, server.mjs and response-drafts.mjs to Malaysia Audit with baseline and deployed hash verification. Backup /home/deploy_audit/backups/before-response-drafts-20261119/code.tgz; Audit-only restart. Loopback and audit.agrinexus.ai health200; deployed module synthetic smoke passed. No live test records, emails or FM2 operations.
+
+### 19 November 2026 — explicit response deadline verification
+- Expanded tests passed: draft reload and submitted-response edits; removal of original evidence plus two replacement photos/labels; controls hidden after expiry; direct draft, submit, legacy reply and mobile-sync requests denied403 without record changes.
+- Draft/save and submit tested at the final millisecond of the due date and at midnight afterward in Asia/Kuala_Lumpur and Africa/Lagos, including text changes, photo removal/replacement and label edits. Eight focused tests plus full Chrome flow passed. All fixtures synthetic/local; no production data read or modified.
+- Production app.js/server.mjs/response-drafts.mjs hashes still match the tested release and public health returned200. No application changes or redeployment required.
