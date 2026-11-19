@@ -723,15 +723,15 @@ function renderAuditActionTracking(entry) {
       </div><div class="audit-action-form-footer"><span role="status"></span><button type="submit" class="secondary-button">Save recommendation changes</button></div></form></details>` : ""}
       <h4>Corrective actions by assignee</h4>
       ${action.responseDueDate ? `<p class="audit-action-badge audit-action-${followup.tone}">Follow-up due: ${auditDateLabel(action.responseDueDate)} · ${escapeHtml(followup.label)}</p>` : ""}
-      ${(action.responses || []).map(reply => `<div class="audit-action-reply"><b>${escapeHtml(reply.author || "Recorded response")}</b><small>${escapeHtml(reply.email || "")} · ${escapeHtml(auditUpdateTime(reply.createdAt))} · Follow-up due: ${auditDateLabel(reply.dueDate)}</small><p class="multiline-text audit-report-text" tabindex="0">${renderStyledText(reply.text,reply.textStyles)}</p>${reply.status?`<p>Status: ${escapeHtml(reply.status)}</p>`:""}${renderAuditObservationImages(reply.images||[])}</div>`).join("") || "<p>No corrective actions recorded yet.</p>"}
+      ${(action.responses || []).map(reply => `<div class="audit-action-reply"><b>${escapeHtml(reply.author || "Recorded response")}</b><small>${escapeHtml(reply.email || "")} · ${escapeHtml(auditUpdateTime(reply.createdAt))} · Follow-up due: ${auditDateLabel(reply.dueDate)}</small><p class="multiline-text audit-report-text" tabindex="0">${renderStyledText(reply.text,reply.textStyles)}</p>${reply.status?`<p>Status: ${escapeHtml(reply.status)}</p>`:""}${renderAuditObservationImages(reply.images||[])}${canReplyToAuditAction(action) && (state.currentSession?.role === "admin" || (reply.author === state.currentSession?.userId && reply.email?.toLowerCase() === state.auditIdentity?.email?.toLowerCase())) ? `<button type="button" class="secondary-button" data-edit-response="${escapeHtml(reply.id)}" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}">Edit response</button>` : ""}</div>`).join("") || "<p>No corrective actions recorded yet.</p>"}
       ${canReplyToAuditAction(action) ? `<form class="audit-action-reply-form" data-entry-id="${escapeHtml(entry.id)}" data-action-id="${escapeHtml(action.id)}">
-        <p class="audit-update-note">Updating as ${escapeHtml(state.currentSession.userId)}. Date and time are recorded automatically when you save.</p>
+        <p class="audit-update-note">${action.responseDraft ? `Draft saved ${escapeHtml(auditUpdateTime(action.responseDraft.savedAt))}. Continue editing below.` : `Updating as ${escapeHtml(state.currentSession.userId)}.`} Save a private draft and continue until the due date. Submit response when ready. Submitted responses can also be edited until the due date.</p>
         <div class="audit-action-grid">
-          <label class="field"><span>Response / follow-up due date</span><input name="dueDate" type="date" value="${escapeHtml(action.responseDueDate || "")}" /></label>
+          <label class="field"><span>Response / follow-up due date</span><input name="dueDate" type="date" value="${escapeHtml(action.responseDraft?.dueDate ?? action.responseDueDate ?? "")}" /></label>
           <label class="field"><span>Action status (automatic)</span><input name="status" value="${escapeHtml(action.status || 'Open')}" readonly /><small>Open through the due date; closes automatically afterward.</small></label>
-          <label class="field audit-action-description"><span>Corrective action taken</span><textarea name="text" rows="2" required placeholder="Describe the corrective action you have taken and attach supporting photos."></textarea></label>
+          <label class="field audit-action-description"><span>Corrective action taken</span><textarea name="text" data-text-styles="${textStyleData(action.responseDraft?.textStyles)}" rows="2" placeholder="Describe the corrective action you have taken and attach supporting photos.">${escapeHtml(action.responseDraft?.text || "")}</textarea></label>
           <div class="field audit-action-description audit-update-photos"><span>Photo evidence (up to 8 photos)</span><div class="audit-update-photo-actions"><button type="button" class="secondary-button" data-reply-upload>Upload photos</button><button type="button" class="secondary-button" data-reply-camera>Take photo</button></div><input type="file" accept="image/jpeg,image/png,image/webp" multiple data-reply-files aria-label="Upload action photos" hidden /><input type="file" accept="image/*" capture="environment" data-reply-camera-file hidden /><small data-reply-photo-count>No photos selected</small><div data-reply-previews class="audit-observation-images"></div></div>
-        </div><div class="audit-action-form-footer"><span role="status" class="audit-reply-status"></span><button class="primary-button" type="submit">Save update</button></div>
+        </div><div class="audit-action-form-footer"><span role="status" class="audit-reply-status"></span><button class="secondary-button" type="submit" value="draft" formnovalidate>Save draft</button><button class="primary-button" type="submit" value="submit">Submit response</button></div>
       </form>` : auditActionLocked(action) ? "<p>Updates are locked after the due date. Ask an administrator to extend the deadline.</p>" : "<p>Replies are limited to the assigned respondent and administrators.</p>"}
     </section>`;
   }).join("")}
@@ -1415,8 +1415,21 @@ async function replyPhoto(file){
 }
 function bindReplyPhotos(){
  document.querySelectorAll('.audit-action-reply-form').forEach(form=>{
- const feedback=form.querySelector('.audit-reply-status');form._replyImages=[];
- const preview=()=>{feedback.textContent=form._replyImages.length?'Photos ready to save with your update.':'';form.querySelector('[data-reply-photo-count]').textContent=form._replyImages.length?`${form._replyImages.length} of 8 photos selected`:'No photos selected';form.querySelector('[data-reply-previews]').innerHTML=form._replyImages.map((im,i)=>`<figure><img src="${im.dataUrl}" alt="Action evidence ${i+1}" /><figcaption>Image ${i+1} · ${escapeHtml(im.name)}</figcaption><label class="field"><span>Image ${i+1} comment / label</span><textarea class="audit-observation-image-description" data-reply-photo-description="${i}" rows="2" maxlength="2000" placeholder="Describe the fix shown in this image.">${escapeHtml(im.description || "")}</textarea></label><button type="button" data-remove-reply-photo="${i}">Remove photo</button></figure>`).join('');form.querySelectorAll('[data-reply-photo-description]').forEach(field=>field.oninput=()=>{form._replyImages[Number(field.dataset.replyPhotoDescription)].description=field.value;});form.querySelectorAll('[data-remove-reply-photo]').forEach(b=>b.onclick=()=>{form._replyImages.splice(Number(b.dataset.removeReplyPhoto),1);preview();});bindImagePreviews();};
+ const feedback=form.querySelector('.audit-reply-status');
+ const entry=state.auditEntries.find(e=>e.id===form.dataset.entryId),action=entry?.actions?.find(a=>a.id===form.dataset.actionId),draft=action?.responseDraft;
+ form._replyImages=structuredClone(draft?.images||[]);form._draftVersion=draft?.version||'';form._replyId=draft?.replyId||'';
+ const preview=()=>{feedback.textContent=form._replyImages.length?'Photos ready to save with your update.':'';form.querySelector('[data-reply-photo-count]').textContent=form._replyImages.length?`${form._replyImages.length} of 8 photos selected`:'No photos selected';form.querySelector('[data-reply-previews]').innerHTML=form._replyImages.map((im,i)=>`<figure><img src="${escapeHtml(im.dataUrl || im.url)}" alt="Action evidence ${i+1}" /><figcaption>Image ${i+1} · ${escapeHtml(im.name)}</figcaption><label class="field"><span>Image ${i+1} comment / label</span><textarea class="audit-observation-image-description" data-reply-photo-description="${i}" rows="2" maxlength="2000" placeholder="Describe the fix shown in this image.">${escapeHtml(im.description || "")}</textarea></label><button type="button" data-remove-reply-photo="${i}">Remove photo</button></figure>`).join('');form.querySelectorAll('[data-reply-photo-description]').forEach(field=>field.oninput=()=>{form._replyImages[Number(field.dataset.replyPhotoDescription)].description=field.value;});form.querySelectorAll('[data-remove-reply-photo]').forEach(b=>b.onclick=()=>{form._replyImages.splice(Number(b.dataset.removeReplyPhoto),1);preview();});bindImagePreviews();};
+ if(form._replyImages.length)preview();
+ document.querySelectorAll('[data-edit-response]').forEach(button=>{
+  if(button.dataset.entryId!==form.dataset.entryId||button.dataset.actionId!==form.dataset.actionId)return;
+  button.onclick=()=>{
+   if((form.elements.text.value.trim()||form._replyImages.length)&&!confirm('Replace the current editing fields with this response? Your saved draft stays unchanged until you save again.'))return;
+   const reply=action.responses.find(r=>r.id===button.dataset.editResponse);if(!reply)return;
+   form._replyId=reply.id;form._replyImages=structuredClone(reply.images||[]);
+   const input=form.elements.text;input.value=reply.text||'';input.dataset.textStyles=JSON.stringify(reply.textStyles||[]);if(input._editor)input._editor.innerHTML=renderEditorText(input.value,reply.textStyles||[]);
+   form.elements.dueDate.value=reply.dueDate||'';preview();feedback.textContent='Editing your submitted response. Save draft or submit changes before the due date.';form.scrollIntoView({block:'center',behavior:'smooth'});
+  };
+ });
  const add=async files=>{if(form._readingPhotos)return;form._readingPhotos=true;try{if(form._replyImages.length+files.length>8)throw new Error('Use up to 8 photos per update.');const images=await Promise.all(Array.from(files,replyPhoto));form._replyImages.push(...images);preview();feedback.textContent='Photos ready to save with your update.';}catch(e){feedback.textContent=e.message;}finally{form._readingPhotos=false;}};
  form.querySelectorAll('[data-reply-files],[data-reply-camera-file]').forEach(input=>input.onchange=()=>{add(input.files);input.value='';});
  form.querySelector('[data-reply-upload]').onclick=()=>form.querySelector('[data-reply-files]').click();
@@ -1500,18 +1513,19 @@ function bindAuditEvents() {
   document.querySelectorAll(".audit-action-reply-form").forEach(form => form.addEventListener("submit", async event => {
     event.preventDefault();
     const feedback = form.querySelector(".audit-reply-status");
-    const button = form.querySelector('button[type="submit"]');
+    const button = event.submitter || form.querySelector('button[value="submit"]');
+    const saveDraft=button.value==='draft';
     const values = Object.fromEntries(new FormData(form));
     if(form._readingPhotos){feedback.textContent='Wait for photos to finish loading.';return;}
     values.images=form._replyImages||[];values.textStyles=editorStyles(form.querySelector('[name="text"]'));
-    if (!values.text.trim()) { feedback.textContent = "Enter a respondent and response."; return; }
+    if (!saveDraft && !values.text.trim()) { feedback.textContent = "Describe the corrective action before submitting."; return; }
     const entry = state.auditEntries.find(item => item.id === form.dataset.entryId);
     if (!entry) return;
-    button.disabled = true;
+    const buttons=form.querySelectorAll('button[type="submit"]');buttons.forEach(b=>b.disabled=true);
     try {
-      await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id: entry.id, operation: "reply", actionId: form.dataset.actionId, ...values})});
-      renderAudit();
-    } catch (error) { feedback.textContent = error.message || "Response could not be saved."; button.disabled = false; }
+      await requestJson(`/api/projects/${PROJECT_ID}/audit-entries`, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id: entry.id, operation: saveDraft ? "save-reply-draft" : "submit-reply", actionId: form.dataset.actionId, replyId:form._replyId||'',draftVersion:form._draftVersion||'',baseUpdatedAt:entry.updatedAt,...values})});
+      await renderAudit();
+    } catch (error) { feedback.textContent = error.message || "Response could not be saved."; buttons.forEach(b=>b.disabled=false); }
   }));
 
   bindReplyPhotos();

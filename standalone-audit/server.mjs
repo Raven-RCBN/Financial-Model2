@@ -1,3 +1,4 @@
+import {loadResponseDraft,writeResponseDraft,removeResponseDraft,prepareResponse} from './response-drafts.mjs';
 import {assignedIssueScope,canViewIssue} from './issue-access.mjs';
 import {passwordPage,passwordChallenges,forgotPasswordPage} from './password-flow.mjs';
 import {smtpSend} from './notifications.mjs';
@@ -315,7 +316,8 @@ async function handle(req,res){
     if (req.method === "GET") {
       url.searchParams.set('company',requireCompany(url.searchParams.get('company')));
       const listing=await indexedReportListing(dataDir,context,url.searchParams,issueScope);
-      return send(req,res,200,{...listing,items:listing.items.map(entry=>({...entry,timeZone:entryTimeZone(entry)}))});
+      const items=await Promise.all(listing.items.map(async entry=>({...entry,timeZone:entryTimeZone(entry),actions:await Promise.all((entry.actions||[]).map(async action=>({...action,responseDraft:(auditActor.admin||(auditActor.respond&&auditActor.email===String(action.email||'').toLowerCase()))?await loadResponseDraft(dataDir,projectId,entry.id,action.id,auditActor.userId):null})))})));
+      return send(req,res,200,{...listing,items});
     }
     if (req.method === "DELETE") {
       const patch = await bodyJson(req);
@@ -334,6 +336,21 @@ async function handle(req,res){
       try {
         const patch = await bodyJson(req);
         const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === patch.id);
+        if(['save-reply-draft','submit-reply'].includes(patch.operation)){
+          if(!existing)return notFound(req,res);
+          requireCompany(existing.entity);
+          if(!visibleIssue(existing))return forbidden(req,res,'This issue is not assigned to you.');
+          const stored=await loadResponseDraft(dataDir,projectId,existing.id,patch.actionId,auditActor.userId);
+          const prepared=prepareResponse(auditActor,patch,existing,stored,{...workflowOptions,timeZone:entryTimeZone(existing)});
+          if(prepared.draft){
+            await writeResponseDraft(dataDir,projectId,existing.id,patch.actionId,auditActor.userId,prepared.draft);
+            return send(req,res,200,{draft:prepared.draft});
+          }
+          const persisted=await persistAuditEntryImages(projectId,enrollNotifications(applyDeadlineStatus(prepared.entry),existing,auditActor));
+          const result=await createAuditEntry(dbPath,projectId,persisted);
+          await removeResponseDraft(dataDir,projectId,existing.id,patch.actionId,auditActor.userId);
+          return send(req,res,201,result);
+        }
         if(patch.operation==='save-draft' && !existing)fail('Draft not found. It may have been deleted.',404);
         requireCompany(existing?.entity || patch.entity);
         if(existing&&!visibleIssue(existing))return forbidden(req,res,'This issue is not assigned to you.');

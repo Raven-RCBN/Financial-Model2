@@ -52,6 +52,16 @@ test('HTTP lists, cards, years, exact links, evidence, mobile and PDF payload en
  const refreshed=await listing('alice');const reply=refreshed.items.find(e=>e.id==='alice-only').actions[0].responses.at(-1);assert.equal(reply.text,'Fixed issue with photo evidence');assert.equal(reply.images.length,1);assert.equal(reply.images[0].description,proof.description);assert(reply.images[0].url.startsWith('/audit/uploads/p/'));assert(!reply.images[0].dataUrl);
  assert.equal((await request('alice',reply.images[0].url)).status,200);assert.equal((await request('bob',reply.images[0].url)).status,403);
  const withProof=await(await request('alice',api+'audit-pdf',{auditYear:'2024',company:'OBAN'})).json();assert.equal(withProof.entries.find(e=>e.id==='alice-only').actions[0].responses.at(-1).images[0].url,reply.images[0].url);assert.equal(withProof.entries.find(e=>e.id==='alice-only').actions[0].responses.at(-1).images[0].description,proof.description);
+ let current=(await listing('alice')).items.find(e=>e.id==='alice-only');
+ const replyId=current.actions[0].responses[0].id;
+ let edit={id:current.id,actionId:'action',replyId,operation:'save-reply-draft',baseUpdatedAt:current.updatedAt,text:'PRIVATE_DRAFT_MARKER',images:[{...current.actions[0].responses[0].images[0],description:'Edited fix label'}]};
+ const draftResult=await request('alice',api+'audit-entries',edit);assert.equal(draftResult.status,200);const stored=(await draftResult.json()).draft;
+ current=(await listing('alice')).items.find(e=>e.id==='alice-only');assert.equal(current.actions[0].responseDraft.text,'PRIVATE_DRAFT_MARKER');assert.equal(current.actions[0].responses[0].text,'Fixed issue with photo evidence');
+ assert.equal((await listing('author')).items.find(e=>e.id==='alice-only').actions[0].responseDraft,null);
+ const draftPdf=await(await request('alice',api+'audit-pdf',{auditYear:'2024',company:'OBAN'})).json();assert(!JSON.stringify(draftPdf).includes('PRIVATE_DRAFT_MARKER'));
+ assert.equal((await request('alice',api+'audit-entries',edit)).status,409);
+ const final=await request('alice',api+'audit-entries',{...edit,operation:'submit-reply',draftVersion:stored.version,text:'Corrected response submitted'});assert.equal(final.status,201);
+ current=(await listing('alice')).items.find(e=>e.id==='alice-only');assert.equal(current.actions[0].responseDraft,null);assert.equal(current.actions[0].responses.length,1);assert.equal(current.actions[0].responses[0].text,'Corrected response submitted');assert.equal(current.actions[0].responses[0].images[0].description,'Edited fix label');
  for(const endpoint of ['audit-entries','audit-sync'])assert.equal((await request('alice',api+endpoint,endpoint==='audit-sync'?{patch:{id:'bob-only'}}:{id:'bob-only',operation:'reply'})).status,403);
  }finally{if(child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}await fs.rm(dir,{recursive:true,force:true});}
 });
