@@ -162,6 +162,12 @@ def build(payload):
                 story.extend([PageBreak(),Table([cells[:2],cells[2:4],cells[4:]],colWidths=[(width-122)/2]*2,style=[('VALIGN',(0,0),(-1,-1),'TOP')])])
         for n,a in enumerate(e.get('actions',[]),1):
             story.extend([paragraph('Recommendation '+str(n),styles['Heading3']),paragraph(a.get('description'),styles['AuditBody'],a.get('descriptionStyles')),paragraph('Responsible person: '+a.get('owner','')+' | Email: '+a.get('email','')+' | Due: '+a.get('dueDate','')+' | Status: '+a.get('status',''),styles['AuditBody'])])
+            for event in a.get('reopenHistory') or []:
+                label='Automatically closed' if event.get('type')=='auto-closed' else 'Reopened / reassigned'
+                before=event.get('from') or {};after=event.get('to') or {}
+                story.append(paragraph(label+' | '+event.get('actor','')+' | '+event.get('at',''),styles['Heading3']))
+                story.append(paragraph(event.get('reason',''),styles['AuditBody']))
+                story.append(paragraph('Status: '+before.get('status','')+' to '+after.get('status','')+' | Assignee: '+before.get('owner','')+' to '+after.get('owner','')+' | Due: '+before.get('dueDate','')+' to '+after.get('dueDate',''),styles['AuditBody']))
             for r in a.get('responses',[]):
                 story.extend([paragraph('Corrective action by '+r.get('author','')+' | '+r.get('createdAt','')+' | Status: '+r.get('status','')+' | Follow-up due: '+r.get('dueDate',''),styles['Heading3']),paragraph(r.get('text'),styles['AuditBody'],r.get('textStyles'))])
                 for item in r.get('images',[]):

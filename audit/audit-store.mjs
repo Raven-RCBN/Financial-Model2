@@ -469,6 +469,7 @@ export function normalizeAuditEntry(entry = {}, projectId = "") {
       id: String(action.id || randomUUID()),
       description: String(action.description || ""),
       descriptionStyles: normalizeTextStyles(action.description,action.descriptionStyles),
+      ...(Array.isArray(action.reopenHistory) ? {reopenHistory: structuredClone(action.reopenHistory)} : {}),
       notificationRevision: String(action.notificationRevision || ''),
       assignedAt: String(action.assignedAt || ''),
       owner: String(action.owner || ""),

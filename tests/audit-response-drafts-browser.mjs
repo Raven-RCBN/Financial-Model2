@@ -5,6 +5,7 @@ const dir=await fs.mkdtemp(path.join(os.tmpdir(),'audit-draft-browser-')),projec
 const year=String(new Date().getFullYear()),company='Synthetic estate';
 const entry={id:'test-issue',projectId,entity:company,auditYear:year,department:'Maintenance',area:'Drain',finding:'Blocked drain',impact:'Flooding',status:'Open',updatedAt:'fixture-revision',actions:[{id:'a',description:'Clear the drain',owner:'alice',email:'alice@example.test',dueDate:'2099-12-31',status:'Open',responses:[]}]};
 const files={'audit-context.json':{company:{name:company},project:{id:projectId,name:'Synthetic audit',settings:{auditCompanies:[company],auditSetup:{years:[year],departments:['Maintenance'],areas:['Drain']}}}},'audit-users.json':{[projectId]:[{name:'alice',email:'alice@example.test',status:'Active',credential:{salt:'fixture'},auditPermissions:{respond:true}}]},'admin-user.json':{name:'admin',credential:{salt:'admin'}},'audit-entries.json':[entry]};
+files['audit-users.json'][projectId].push(...['milo','bob'].map(name=>({id:name,name,email:name+'@example.test',status:'Active',credential:{salt:'fixture'},auditPermissions:name==='milo'?{create:true,recommend:true,respond:true}:{respond:true}})));
 await Promise.all(Object.entries(files).map(([name,value])=>fs.writeFile(path.join(dir,name),JSON.stringify(value))));
 const port=43000+Math.floor(Math.random()*10000),base='http://127.0.0.1:'+port;
 const child=spawn(process.execPath,['standalone-audit/server.mjs'],{cwd:path.resolve(import.meta.dirname,'..'),env:{...process.env,PORT:String(port),AUDIT_DATA_DIR:dir,AUDIT_SESSION_SECRET:secret}});
@@ -32,7 +33,7 @@ try{
  const file=path.join(dir,'audit-entries.json');const stored=JSON.parse(await fs.readFile(file,'utf8'));
  stored[0].actions[0].dueDate='2000-01-01';stored[0].updatedAt='expired-fixture-revision';
  await fs.writeFile(file+'.tmp',JSON.stringify(stored));await fs.rename(file+'.tmp',file);
- await page.reload();await page.getByText('Updates are locked after the due date. Ask an administrator to extend the deadline.',{exact:true}).waitFor();
+ await page.reload();await page.getByText('Updates are locked after the due date. Ask Milo to reopen the action and extend the deadline.',{exact:true}).waitFor();
  assert.equal(await page.locator('.audit-action-reply-form').count(),0);assert.equal(await page.getByRole('button',{name:'Edit response',exact:true}).count(),0);
  const before=await fs.readFile(file,'utf8'),reply=stored[0].actions[0].responses[0];
  for(const operation of ['save-reply-draft','submit-reply','reply']){
@@ -41,6 +42,23 @@ try{
  }
  const mobile=await context.request.post(base+'/api/projects/'+projectId+'/audit-sync',{data:{operationId:crypto.randomUUID(),base:{},patch:{id:entry.id,operation:'reply',actionId:'a',text:'Forbidden mobile change',status:'Open',images:[]}}});assert.equal(mobile.status(),403);
  assert.equal(await fs.readFile(file,'utf8'),before);assert.deepEqual(errors,[]);
- console.log('PASS: draft and submitted edits persist; original photo removed and two replacements saved; expired UI hides controls; direct draft/submit/reply/mobile calls return403; records unchanged');
+ // Milo can reopen, keep the same assignee, then reopen again with another assignee.
+ const expired=JSON.parse(await fs.readFile(file,'utf8'))[0];
+ const illegal=await context.request.post(base+'/api/projects/'+projectId+'/audit-entries',{data:{id:entry.id,operation:'reopen-action',actionId:'a',baseUpdatedAt:expired.updatedAt,owner:'alice',email:'alice@example.test',dueDate:'2099-12-31',reason:'Unauthorized reopening',userId:'milo'}});assert.equal(illegal.status(),403);
+ const miloContext=await browser.newContext();const miloToken=Buffer.from(JSON.stringify({userId:'milo',authVersion:'fixture',expiresAt:Date.now()+600000})).toString('base64url');await miloContext.addCookies([{name:'audit_session',value:miloToken+'.'+crypto.createHmac('sha256',secret).update(miloToken).digest('base64url'),url:base}]);
+ const miloPage=await miloContext.newPage();
+ for(const owner of ['alice','bob']){
+  const data=JSON.parse(await fs.readFile(file,'utf8'));data[0].actions[0].dueDate='2000-01-01';data[0].updatedAt='expired-'+owner;await fs.writeFile(file+'.tmp',JSON.stringify(data));await fs.rename(file+'.tmp',file);
+  await miloPage.goto(base+'/app?company='+encodeURIComponent(company)+'&year='+year+'&item='+entry.id);
+  await miloPage.getByText('Reopen / reassign action',{exact:true}).click();const form=miloPage.locator('.audit-reopen-action-form');
+  await form.locator('[data-audit-assignee]').selectOption({label:owner+' · '+owner+'@example.test'});
+  await form.locator('[name="dueDate"]').fill('2099-12-31');await form.locator('[name="reason"]').fill('Incomplete fix; correction required for '+owner);
+  const response=miloPage.waitForResponse(r=>r.request().method()==='POST'&&r.url().includes('/audit-entries'));await form.getByRole('button',{name:'Reopen action',exact:true}).click();assert((await response).ok());
+  const reopened=JSON.parse(await fs.readFile(file,'utf8'))[0];assert.equal(reopened.status,'Open');assert.equal(reopened.actions[0].owner,owner);assert.equal(reopened.actions[0].responses.length,1);assert.equal(reopened.actions[0].responses[0].images.length,2);
+  const history=reopened.actions[0].reopenHistory;assert.equal(history.at(-1).actor,'milo');assert.equal(history.at(-1).to.owner,owner);assert.equal(history.at(-1).from.status,'Closed');assert.equal(history.at(-1).to.status,'Open');
+ }
+ await miloPage.reload();await miloPage.locator('.audit-action-history summary').click();assert((await miloPage.locator('.audit-action-history').innerText()).includes('Incomplete fix; correction required for bob'));
+ const noLongerAssigned=await context.request.get(base+'/api/projects/'+projectId+'/audit-entries?company='+encodeURIComponent(company));assert.equal((await noLongerAssigned.json()).total,0);
+ console.log('PASS: response drafts/photos/editing and expiry lock; Milo-only reopen, same-person assignment and reassignment; prior responses/photos preserved; permanent status/assignment history displayed; old assignee loses issue access');
 
 }finally{await browser?.close();if(child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}await fs.rm(dir,{recursive:true,force:true});}

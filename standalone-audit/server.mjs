@@ -1,3 +1,4 @@
+import {canReopenActions,reopenAction,preserveActionHistory,assertNoImplicitReopen} from './action-reopen.mjs';
 import {loadResponseDraft,writeResponseDraft,removeResponseDraft,prepareResponse} from './response-drafts.mjs';
 import {assignedIssueScope,canViewIssue} from './issue-access.mjs';
 import {passwordPage,passwordChallenges,forgotPasswordPage} from './password-flow.mjs';
@@ -155,6 +156,7 @@ async function handle(req,res){
  if(/^\/public\/[a-zA-Z0-9_.-]+\.(png|jpe?g|webp|svg)$/.test(url.pathname))return asset(req,res,existsSync(path.join(dataDir,'branding',path.basename(url.pathname)))?path.join(dataDir,'branding',path.basename(url.pathname)):path.join(assetRoot,url.pathname));
  const projectId=context.project.id;
  if(session.role!=='admin'&&!session.projectIds?.includes(projectId))return forbidden(req,res,'Audit project access required.'); const auditActor={...auditIdentity(session,directories[projectId]||[]),timeZone:workflowOptions.timeZone};
+ auditActor.reopenActions=canReopenActions(auditActor);
  if(auditActor.admin)auditActor.email=process.env.AUDIT_ADMIN_EMAIL || admin.email || '';
  const issueScope=assignedIssueScope(auditActor);
  const visibleIssue=entry=>auditUserInCompany(auditActor,entry.entity||context.company.name)&&canViewIssue(auditActor,entry);
@@ -294,7 +296,10 @@ async function handle(req,res){
       requireCompany(existing?.entity || request.patch.entity);
       if(existing&&!visibleIssue(existing))return forbidden(req,res,'This issue is not assigned to you.');
       if(existing?.sourceReport&&request.patch.operation==='update-finding')return forbidden(req,res,'Issued report observations are preserved. Add a new finding or corrective action instead.');
+      if(request.patch.operation==='update-action'&&applyDeadlineStatus(existing||{}).actions?.some(a=>a.id===request.patch.actionId&&a.status==='Closed'))return forbidden(req,res,'Only Milo can reopen a closed action. Use the web reopening form.');
+      preserveActionHistory(request.patch,existing);
       const prepared = prepareMobileWrite(auditActor, request, existing, {...workflowOptions,timeZone:entryTimeZone(existing)});
+      assertNoImplicitReopen(auditActor,existing,prepared.entry);
       if(!existing){prepared.entry.entity=requireCompany(request.patch.entity);delete prepared.entry.sourceReport;}
       requireCompany(prepared.entry.entity || context.company.name);
       if (prepared.duplicate) return send(req,res,200,{entry:prepared.entry,duplicate:true},"application/json; charset=utf-8",{cacheControl:"no-store"});
@@ -336,6 +341,15 @@ async function handle(req,res){
       try {
         const patch = await bodyJson(req);
         const existing = (await allAuditEntries(dbPath, projectId)).find(entry => entry.id === patch.id);
+        if(patch.operation==='reopen-action'){
+          if(!existing)return notFound(req,res);
+          requireCompany(existing.entity);
+          if(!visibleIssue(existing))return forbidden(req,res);
+          const reopened=reopenAction(auditActor,patch,existing,auditUsers,[admin.name]);
+          const result=await createAuditEntry(dbPath,projectId,enrollNotifications(reopened,existing,auditActor));
+          setImmediate(()=>mailWorker.run());
+          return send(req,res,201,result);
+        }
         if(['save-reply-draft','submit-reply'].includes(patch.operation)){
           if(!existing)return notFound(req,res);
           requireCompany(existing.entity);
@@ -355,8 +369,14 @@ async function handle(req,res){
         requireCompany(existing?.entity || patch.entity);
         if(existing&&!visibleIssue(existing))return forbidden(req,res,'This issue is not assigned to you.');
         if(!existing || existing.status==='Draft'){patch.entity=requireCompany(patch.entity || existing?.entity);delete patch.sourceReport;}
+        preserveActionHistory(patch,existing);
+        if(patch.operation==='update-action'){
+          const action=applyDeadlineStatus(existing||{}).actions?.find(a=>a.id===patch.actionId);
+          if(action?.status==='Closed')return forbidden(req,res,'Only Milo can reopen a closed action. Use Reopen / reassign with a new due date and reason.');
+        }
         validateAuditAssignees(patch, auditUsers, [admin.name], assignmentOptions(existing?.status==='Draft' ? patch : existing || patch));
         const authorized = applyAuditWrite(auditActor, patch, existing, {...workflowOptions,timeZone:entryTimeZone(existing)});
+        assertNoImplicitReopen(auditActor,existing,authorized);
         if(existing?.status==='Draft')validateAuditAssignees({...authorized,operation:undefined},auditUsers,[admin.name],assignmentOptions(authorized));
         if(!existing || existing.status==='Draft')validateCompanyFields(context,authorized);
         await verifyImageReferences(authorized);

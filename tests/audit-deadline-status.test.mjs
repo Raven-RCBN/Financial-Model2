@@ -8,8 +8,9 @@ test('due date inclusive, recommendations close independently, overall after lat
  e=applyDeadlineStatus(e,new Date('2026-10-26T23:00:00Z'));assert.equal(e.status,'Closed');
  assert.equal(applyDeadlineStatus(e,new Date('2026-10-27T12:00:00Z')),e);
 });
-test('drafts/imports untouched; missing dates do not auto-close; extension reopens',()=>{
- for(const e of [{...entry,status:'Draft'},{...entry,sourceReport:{issue:1}}])assert.equal(applyDeadlineStatus(e,new Date('2030-01-01')),e);
+test('drafts and untracked imports untouched; tracked imports close; missing dates do not auto-close',()=>{
+ for(const e of [{...entry,status:'Draft'},{status:'Open',sourceReport:{issue:1},actions:[]}])assert.equal(applyDeadlineStatus(e,new Date('2030-01-01')),e);
+ assert.equal(applyDeadlineStatus({...entry,sourceReport:{issue:1}},new Date('2030-01-01')).status,'Closed');
  assert.equal(applyDeadlineStatus({...entry,actions:[{status:'Open'}]},new Date('2030-01-01')).status,'Open');
  const e={...entry,status:'Closed',actions:[{status:'Closed',dueDate:'2026-11-01'}]};
  assert.equal(applyDeadlineStatus(e,new Date('2026-10-27')).status,'Open');
