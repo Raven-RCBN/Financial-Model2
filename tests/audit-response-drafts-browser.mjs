@@ -45,6 +45,19 @@ try{
  // Milo can reopen, keep the same assignee, then reopen again with another assignee.
  const expired=JSON.parse(await fs.readFile(file,'utf8'))[0];
  const illegal=await context.request.post(base+'/api/projects/'+projectId+'/audit-entries',{data:{id:entry.id,operation:'reopen-action',actionId:'a',baseUpdatedAt:expired.updatedAt,owner:'alice',email:'alice@example.test',dueDate:'2099-12-31',reason:'Unauthorized reopening',userId:'milo'}});assert.equal(illegal.status(),403);
+ const beforeDenied=await fs.readFile(file,'utf8');
+ for(const name of ['admin','bob']){
+  const blockedContext=await browser.newContext();const blockedPayload=Buffer.from(JSON.stringify({userId:name,authVersion:name==='admin'?'admin':'fixture',expiresAt:Date.now()+600000})).toString('base64url');await blockedContext.addCookies([{name:'audit_session',value:blockedPayload+'.'+crypto.createHmac('sha256',secret).update(blockedPayload).digest('base64url'),url:base}]);
+  const denied=await blockedContext.request.post(base+'/api/projects/'+projectId+'/audit-entries',{data:{id:entry.id,operation:'reopen-action',actionId:'a',baseUpdatedAt:expired.updatedAt,owner:'alice',email:'alice@example.test',dueDate:'2099-12-31',reason:'Must be blocked'}});assert.equal(denied.status(),403);
+  if(name==='admin'){
+   const adminPage=await blockedContext.newPage();await adminPage.goto(base+'/app?company='+encodeURIComponent(company)+'&year='+year+'&item='+entry.id);await adminPage.locator('.audit-action-card').waitFor();assert.equal(await adminPage.locator('.audit-reopen-action-form').count(),0);
+   const bypass=await blockedContext.request.post(base+'/api/projects/'+projectId+'/audit-entries',{data:{id:entry.id,operation:'update-action',actionId:'a',action:{description:'Clear the drain',owner:'alice',email:'alice@example.test',dueDate:'2099-12-31'}}});assert.equal(bypass.status(),403);
+  }
+  await blockedContext.close();
+ }
+ assert.equal(await fs.readFile(file,'utf8'),beforeDenied);
+ const previousResponses=structuredClone(expired.actions[0].responses);
+ const photoHashes=await Promise.all(previousResponses.flatMap(r=>r.images).map(async image=>crypto.createHash('sha256').update(await fs.readFile(path.join(dir,'uploads',image.url.slice('/audit/uploads/'.length)))).digest('hex')));
  const miloContext=await browser.newContext();const miloToken=Buffer.from(JSON.stringify({userId:'milo',authVersion:'fixture',expiresAt:Date.now()+600000})).toString('base64url');await miloContext.addCookies([{name:'audit_session',value:miloToken+'.'+crypto.createHmac('sha256',secret).update(miloToken).digest('base64url'),url:base}]);
  const miloPage=await miloContext.newPage();
  for(const owner of ['alice','bob']){
@@ -55,10 +68,13 @@ try{
   await form.locator('[name="dueDate"]').fill('2099-12-31');await form.locator('[name="reason"]').fill('Incomplete fix; correction required for '+owner);
   const response=miloPage.waitForResponse(r=>r.request().method()==='POST'&&r.url().includes('/audit-entries'));await form.getByRole('button',{name:'Reopen action',exact:true}).click();assert((await response).ok());
   const reopened=JSON.parse(await fs.readFile(file,'utf8'))[0];assert.equal(reopened.status,'Open');assert.equal(reopened.actions[0].owner,owner);assert.equal(reopened.actions[0].responses.length,1);assert.equal(reopened.actions[0].responses[0].images.length,2);
+  assert.deepEqual(reopened.actions[0].responses,previousResponses);
+  const priorHistory=data[0].actions[0].reopenHistory||[];assert.deepEqual(reopened.actions[0].reopenHistory.slice(0,priorHistory.length),priorHistory);
   const history=reopened.actions[0].reopenHistory;assert.equal(history.at(-1).actor,'milo');assert.equal(history.at(-1).to.owner,owner);assert.equal(history.at(-1).from.status,'Closed');assert.equal(history.at(-1).to.status,'Open');
  }
+ const afterPhotos=await Promise.all(previousResponses.flatMap(r=>r.images).map(async image=>crypto.createHash('sha256').update(await fs.readFile(path.join(dir,'uploads',image.url.slice('/audit/uploads/'.length)))).digest('hex')));assert.deepEqual(afterPhotos,photoHashes);
  await miloPage.reload();await miloPage.locator('.audit-action-history summary').click();assert((await miloPage.locator('.audit-action-history').innerText()).includes('Incomplete fix; correction required for bob'));
  const noLongerAssigned=await context.request.get(base+'/api/projects/'+projectId+'/audit-entries?company='+encodeURIComponent(company));assert.equal((await noLongerAssigned.json()).total,0);
- console.log('PASS: response drafts/photos/editing and expiry lock; Milo-only reopen, same-person assignment and reassignment; prior responses/photos preserved; permanent status/assignment history displayed; old assignee loses issue access');
+ console.log('PASS: response drafts/photos/editing and expiry lock; Milo-only reopen, same-person assignment and reassignment; prior responses and photo bytes unchanged; earlier history preserved and displayed; admin/other users and alternate routes blocked; old assignee loses issue access');
 
 }finally{await browser?.close();if(child.exitCode===null){const exited=once(child,'exit');child.kill();await exited;}await fs.rm(dir,{recursive:true,force:true});}
